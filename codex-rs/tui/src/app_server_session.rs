@@ -915,6 +915,8 @@ pub(crate) fn model_preset_from_api_model(model: ApiModel) -> ModelPreset {
         display_name: model.display_name,
         description: model.description,
         default_reasoning_effort: model.default_reasoning_effort,
+        reasoning_control: model.reasoning_control,
+        supports_thinking_toggle: model.supports_thinking_toggle,
         supported_reasoning_efforts: model
             .supported_reasoning_efforts
             .into_iter()

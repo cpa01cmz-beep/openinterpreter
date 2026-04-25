@@ -1,4 +1,5 @@
 use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ReasoningControl;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -23,6 +24,10 @@ pub struct BundledProviderModelEntry {
     pub description: Option<String>,
     #[serde(default)]
     pub reasoning: bool,
+    #[serde(default)]
+    pub thinking_toggle: bool,
+    #[serde(default)]
+    pub reasoning_control: ReasoningControl,
     #[serde(default)]
     pub input_modalities: Vec<InputModality>,
     pub context_window: Option<i64>,

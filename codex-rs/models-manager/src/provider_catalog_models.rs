@@ -5,6 +5,7 @@ use codex_model_provider_info::bundled_provider_catalog_entry;
 use codex_model_provider_info::bundled_provider_catalog_entry_for_base_url;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::openai_models::ReasoningControl;
 use codex_protocol::openai_models::ReasoningEffort;
 
 pub(crate) fn bundled_provider_model_infos(provider: &ModelProviderInfo) -> Vec<ModelInfo> {
@@ -38,7 +39,17 @@ fn model_info_from_bundled_provider_model(model: &BundledProviderModelEntry) -> 
     fallback.slug = model.id.clone();
     fallback.display_name = model.display_name.clone();
     fallback.description = model.description.clone();
-    fallback.default_reasoning_level = model.reasoning.then_some(ReasoningEffort::Medium);
+    fallback.reasoning_control = if model.reasoning_control != ReasoningControl::None {
+        model.reasoning_control
+    } else if model.thinking_toggle {
+        ReasoningControl::ThinkingToggle
+    } else if model.reasoning {
+        ReasoningControl::Fixed
+    } else {
+        ReasoningControl::None
+    };
+    fallback.default_reasoning_level =
+        (fallback.reasoning_control != ReasoningControl::None).then_some(ReasoningEffort::Medium);
     fallback.supported_reasoning_levels = Vec::new();
     fallback.visibility = ModelVisibility::List;
     fallback.supported_in_api = true;
@@ -79,15 +90,25 @@ mod tests {
         };
 
         let models = bundled_provider_model_infos(&provider);
-        assert!(models.iter().any(|model| model.slug == "deepseek-chat"));
+        assert!(models.iter().any(|model| model.slug == "deepseek-v4-pro"));
         assert_eq!(
             models
                 .iter()
-                .find(|model| model.slug == "deepseek-chat")
-                .expect("deepseek-chat model")
+                .find(|model| model.slug == "deepseek-v4-pro")
+                .expect("deepseek-v4-pro model")
                 .visibility,
             ModelVisibility::List
         );
+        let v4_pro = models
+            .iter()
+            .find(|model| model.slug == "deepseek-v4-pro")
+            .expect("deepseek-v4-pro model");
+        assert_eq!(
+            v4_pro.default_reasoning_level,
+            Some(ReasoningEffort::Medium)
+        );
+        assert_eq!(v4_pro.reasoning_control, ReasoningControl::ThinkingToggle);
+        assert!(v4_pro.supported_reasoning_levels.is_empty());
     }
 
     #[test]

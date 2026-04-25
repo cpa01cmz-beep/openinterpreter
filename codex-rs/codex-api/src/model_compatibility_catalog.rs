@@ -1,5 +1,6 @@
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::openai_models::ReasoningControl;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -17,6 +18,10 @@ pub(crate) struct CompatibleModelCatalogEntry {
     pub(crate) supported_parameters: Vec<String>,
     #[serde(default)]
     pub(crate) supported_reasoning_levels: Vec<ReasoningEffortPreset>,
+    #[serde(default)]
+    pub(crate) supports_thinking_toggle: bool,
+    #[serde(default)]
+    pub(crate) reasoning_control: ReasoningControl,
     #[serde(default)]
     pub(crate) supports_parallel_tool_calls: bool,
     #[serde(default)]

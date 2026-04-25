@@ -118,6 +118,7 @@ use crate::harness::claude_code::CLAUDE_CODE_USER_AGENT;
 use crate::harness::claude_code::build_request as build_claude_code_request;
 use crate::harness::claude_code::build_title_request as build_claude_code_title_request;
 use crate::harness::kimi_cli::build_request as build_kimi_cli_request;
+use crate::harness::minimal::build_request as build_minimal_request;
 use crate::harness::routing::ChatHarnessRoute;
 use crate::harness::routing::MessagesHarnessRoute;
 use crate::harness::routing::StreamTransportRoute;
@@ -1572,11 +1573,97 @@ impl ModelClientSession {
         prompt: &Prompt,
         model_info: &ModelInfo,
         session_telemetry: &SessionTelemetry,
+        effort: Option<ReasoningEffortConfig>,
     ) -> Result<ResponseStream> {
         match route {
             ChatHarnessRoute::KimiCli => {
                 self.stream_kimi_cli_api(prompt, model_info, session_telemetry)
                     .await
+            }
+            ChatHarnessRoute::Minimal => {
+                self.stream_minimal_api(prompt, model_info, session_telemetry, effort)
+                    .await
+            }
+        }
+    }
+
+    #[instrument(
+        name = "model_client.stream_minimal_api",
+        level = "info",
+        skip_all,
+        fields(
+            model = %model_info.slug,
+            wire_api = %self.client.state.provider.info().wire_api,
+            transport = "chat_http",
+            http.method = "POST",
+            api.path = "chat/completions"
+        )
+    )]
+    async fn stream_minimal_api(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        session_telemetry: &SessionTelemetry,
+        effort: Option<ReasoningEffortConfig>,
+    ) -> Result<ResponseStream> {
+        let auth_manager = self.client.state.provider.auth_manager();
+        let mut auth_recovery = auth_manager
+            .as_ref()
+            .map(AuthManager::unauthorized_recovery);
+        let mut pending_retry = PendingUnauthorizedRetry::default();
+        loop {
+            let auth = self.client.state.provider.auth().await;
+            let api_provider = self.client.state.provider.api_provider().await?;
+            let api_auth = self.client.state.provider.api_auth().await?;
+            let request_auth_context = AuthRequestTelemetryContext::new(
+                auth.as_ref().map(CodexAuth::auth_mode),
+                api_auth.as_ref(),
+                pending_retry,
+            );
+            let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
+                session_telemetry,
+                request_auth_context,
+                RequestRouteTelemetry::for_endpoint(CHAT_COMPLETIONS_ENDPOINT),
+                self.client.state.auth_env_telemetry.clone(),
+            );
+            let (request_body, tool_kinds) = build_minimal_request(prompt, model_info, effort)
+                .map_err(|err| {
+                    CodexErr::InvalidRequest(format!("invalid minimal request: {err}"))
+                })?;
+            let options = ApiResponsesOptions {
+                conversation_id: Some(self.client.state.conversation_id.to_string()),
+                session_source: Some(self.client.state.session_source.clone()),
+                extra_headers: ApiHeaderMap::new(),
+                compression: Compression::None,
+                turn_state: None,
+            };
+            let client = ChatCompletionsCompatClient::new(
+                ReqwestTransport::new(build_reqwest_client()),
+                api_provider,
+                api_auth,
+            )
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            match client
+                .stream_chat_request_value(request_body, tool_kinds, options)
+                .await
+            {
+                Ok(stream) => {
+                    let (stream, _) = map_response_stream(stream, session_telemetry.clone());
+                    return Ok(stream);
+                }
+                Err(ApiError::Transport(
+                    unauthorized_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::UNAUTHORIZED => {
+                    pending_retry = PendingUnauthorizedRetry::from_recovery(
+                        handle_unauthorized(
+                            unauthorized_transport,
+                            &mut auth_recovery,
+                            session_telemetry,
+                        )
+                        .await?,
+                    );
+                }
+                Err(err) => return Err(map_api_error(err)),
             }
         }
     }
@@ -1938,7 +2025,7 @@ impl ModelClientSession {
                 .await
             }
             StreamTransportRoute::ChatHarness(route) => {
-                self.stream_chat_harness_api(route, prompt, model_info, session_telemetry)
+                self.stream_chat_harness_api(route, prompt, model_info, session_telemetry, effort)
                     .await
             }
             StreamTransportRoute::MessagesHarness(route) => {

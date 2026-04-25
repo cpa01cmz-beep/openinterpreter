@@ -8315,22 +8315,34 @@ impl ChatWidget {
             let description =
                 (!preset.description.is_empty()).then_some(preset.description.to_string());
             let is_current = preset.model.as_str() == self.current_model();
-            let single_supported_effort = preset.supported_reasoning_efforts.len() == 1;
             let preset_for_action = preset.clone();
-            let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-                let preset_for_event = preset_for_action.clone();
-                tx.send(AppEvent::OpenReasoningPopup {
-                    model: preset_for_event,
-                });
-            })];
+            let single_supported_effort = Self::single_supported_reasoning_effort(&preset);
+            let actions: Vec<SelectionAction> =
+                if let Some(effort_for_action) = single_supported_effort {
+                    vec![Box::new(move |tx| {
+                        tx.send(AppEvent::UpdateModel(preset_for_action.model.clone()));
+                        tx.send(AppEvent::UpdateReasoningEffort(effort_for_action));
+                        tx.send(AppEvent::PersistModelSelection {
+                            model: preset_for_action.model.clone(),
+                            effort: effort_for_action,
+                        });
+                    })]
+                } else {
+                    vec![Box::new(move |tx| {
+                        let preset_for_event = preset_for_action.clone();
+                        tx.send(AppEvent::OpenReasoningPopup {
+                            model: preset_for_event,
+                        });
+                    })]
+                };
             items.push(SelectionItem {
                 name: preset.model.clone(),
                 description,
                 is_current,
                 is_default: preset.is_default,
                 actions,
-                dismiss_on_select: single_supported_effort,
-                dismiss_parent_on_child_accept: !single_supported_effort,
+                dismiss_on_select: single_supported_effort.is_some(),
+                dismiss_parent_on_child_accept: single_supported_effort.is_none(),
                 ..Default::default()
             });
         }
@@ -8344,7 +8356,7 @@ impl ChatWidget {
             ),
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
-            footer_hint: Some("Press enter to select reasoning effort, or esc to dismiss.".into()),
+            footer_hint: Some("Press enter to select, or esc to dismiss.".into()),
             items,
             header,
             ..Default::default()
@@ -8531,6 +8543,59 @@ impl ChatWidget {
         let supported = preset.supported_reasoning_efforts;
         let in_plan_mode =
             self.collaboration_modes_enabled() && self.active_mode_kind() == ModeKind::Plan;
+
+        if supported.is_empty() && preset.supports_thinking_toggle {
+            let model = preset.model.clone();
+            let on_actions = Self::model_selection_actions(
+                model.clone(),
+                None,
+                self.should_prompt_plan_mode_reasoning_scope(&model, None),
+            );
+            let off_actions = Self::model_selection_actions(
+                model.clone(),
+                Some(ReasoningEffortConfig::None),
+                self.should_prompt_plan_mode_reasoning_scope(
+                    &model,
+                    Some(ReasoningEffortConfig::None),
+                ),
+            );
+
+            let mut header = ColumnRenderable::new();
+            header.push(Line::from(
+                format!("Select Thinking Mode for {}", preset.model).bold(),
+            ));
+            header.push(Line::from(
+                "This will start a new chat with this selection.".dim(),
+            ));
+
+            self.bottom_pane.show_selection_view(SelectionViewParams {
+                header: Box::new(header),
+                footer_hint: Some(standard_popup_hint_line()),
+                items: vec![
+                    SelectionItem {
+                        name: "On (default)".to_string(),
+                        description: Some(
+                            "Use the model's default thinking behavior without forcing an effort level."
+                                .to_string(),
+                        ),
+                        actions: on_actions,
+                        dismiss_on_select: true,
+                        ..Default::default()
+                    },
+                    SelectionItem {
+                        name: "Off".to_string(),
+                        description: Some(
+                            "Disable thinking explicitly for this model.".to_string(),
+                        ),
+                        actions: off_actions,
+                        dismiss_on_select: true,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            });
+            return;
+        }
 
         let warn_effort = if supported
             .iter()

@@ -1989,6 +1989,8 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
             effort: ReasoningEffortConfig::Medium,
             description: "medium".to_string(),
         }],
+        reasoning_control: codex_protocol::openai_models::ReasoningControl::Effort,
+        supports_thinking_toggle: false,
         supports_personality: false,
         additional_speed_tiers: Vec::new(),
         is_default: false,
@@ -2098,6 +2100,94 @@ async fn reasoning_popup_shows_extra_high_with_space() {
 }
 
 #[tokio::test]
+async fn model_popup_single_default_effort_selects_and_dismisses() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    let preset = ModelPreset {
+        id: "deepseek-v4-pro".to_string(),
+        model: "deepseek-v4-pro".to_string(),
+        display_name: "deepseek-v4-pro".to_string(),
+        description: "".to_string(),
+        default_reasoning_effort: ReasoningEffortConfig::None,
+        supported_reasoning_efforts: Vec::new(),
+        reasoning_control: codex_protocol::openai_models::ReasoningControl::None,
+        supports_thinking_toggle: false,
+        supports_personality: false,
+        additional_speed_tiers: Vec::new(),
+        is_default: false,
+        upgrade: None,
+        show_in_picker: true,
+        availability_nux: None,
+        supported_in_api: true,
+        input_modalities: default_input_modalities(),
+    };
+
+    chat.open_all_models_popup(vec![preset]);
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(popup.contains("deepseek-v4-pro"));
+    assert!(
+        !popup.contains("select reasoning effort"),
+        "single/default-effort models should not advertise a second reasoning step; popup: {popup}"
+    );
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    let popup_after_enter = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(
+        !popup_after_enter.contains("deepseek-v4-pro"),
+        "expected popup to dismiss after selecting single/default-effort model; popup: {popup_after_enter}"
+    );
+
+    let mut events = Vec::new();
+    while let Ok(ev) = rx.try_recv() {
+        events.push(ev);
+    }
+
+    assert!(
+        events.iter().any(|ev| matches!(
+            ev,
+            AppEvent::PersistModelSelection { model, effort }
+                if model == "deepseek-v4-pro" && effort.is_none()
+        )),
+        "expected model selection to persist directly; events: {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn thinking_toggle_model_opens_thinking_mode_selection() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    let preset = ModelPreset {
+        id: "deepseek-v4-pro".to_string(),
+        model: "deepseek-v4-pro".to_string(),
+        display_name: "deepseek-v4-pro".to_string(),
+        description: "".to_string(),
+        default_reasoning_effort: ReasoningEffortConfig::Medium,
+        supported_reasoning_efforts: Vec::new(),
+        reasoning_control: codex_protocol::openai_models::ReasoningControl::ThinkingToggle,
+        supports_thinking_toggle: true,
+        supports_personality: false,
+        additional_speed_tiers: Vec::new(),
+        is_default: false,
+        upgrade: None,
+        show_in_picker: true,
+        availability_nux: None,
+        supported_in_api: true,
+        input_modalities: default_input_modalities(),
+    };
+
+    chat.open_reasoning_popup(preset);
+
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(
+        popup.contains("Select Thinking Mode for deepseek-v4-pro"),
+        "expected thinking-toggle models to open thinking mode selection; popup: {popup}"
+    );
+    assert!(popup.contains("On (default)"));
+    assert!(popup.contains("Off"));
+}
+
+#[tokio::test]
 async fn single_reasoning_option_skips_selection() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
@@ -2112,6 +2202,8 @@ async fn single_reasoning_option_skips_selection() {
         description: "".to_string(),
         default_reasoning_effort: ReasoningEffortConfig::High,
         supported_reasoning_efforts: single_effort,
+        reasoning_control: codex_protocol::openai_models::ReasoningControl::Effort,
+        supports_thinking_toggle: false,
         supports_personality: false,
         additional_speed_tiers: Vec::new(),
         is_default: false,

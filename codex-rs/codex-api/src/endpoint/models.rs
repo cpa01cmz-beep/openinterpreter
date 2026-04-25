@@ -13,6 +13,7 @@ use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
+use codex_protocol::openai_models::ReasoningControl;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationPolicyConfig;
@@ -217,9 +218,17 @@ fn decode_models_response(body: &[u8]) -> Result<Vec<ModelInfo>, ApiError> {
 fn anthropic_model_info_from_capabilities(model: AnthropicModel) -> ModelInfo {
     let supported_reasoning_levels =
         anthropic_supported_reasoning_levels(&model.capabilities.effort);
-    let supports_reasoning = model.capabilities.thinking.supported
+    let supports_thinking_toggle = model.capabilities.thinking.supported
         || model.capabilities.thinking.types.enabled.supported
         || model.capabilities.thinking.types.adaptive.supported;
+    let reasoning_control = if !supported_reasoning_levels.is_empty() {
+        ReasoningControl::Effort
+    } else if supports_thinking_toggle {
+        ReasoningControl::ThinkingBudget
+    } else {
+        ReasoningControl::None
+    };
+    let supports_reasoning = supports_thinking_toggle || !supported_reasoning_levels.is_empty();
     let default_reasoning_level = if supports_reasoning {
         Some(ReasoningEffort::Medium)
     } else {
@@ -236,6 +245,7 @@ fn anthropic_model_info_from_capabilities(model: AnthropicModel) -> ModelInfo {
         description: anthropic_description(&model.capabilities),
         default_reasoning_level,
         supported_reasoning_levels,
+        reasoning_control,
         shell_type: ConfigShellToolType::Default,
         visibility: ModelVisibility::List,
         supported_in_api: true,
@@ -311,8 +321,10 @@ fn openai_compatible_model_info_from_id(model: OpenAiCompatibleModel) -> ModelIn
     let supported_parameters = merged_supported_parameters(&model, catalog_entry);
     let supported_reasoning_levels =
         supported_reasoning_levels_from_metadata(&supported_parameters, catalog_entry);
-    let default_reasoning_level =
-        (!supported_reasoning_levels.is_empty()).then_some(ReasoningEffort::Medium);
+    let reasoning_control = reasoning_control_from_metadata(&supported_parameters, catalog_entry);
+    let default_reasoning_level = (reasoning_control != ReasoningControl::None
+        || !supported_reasoning_levels.is_empty())
+    .then_some(ReasoningEffort::Medium);
     let visibility = compatible_picker_visibility(&supported_parameters, catalog_entry);
     let priority = compatible_model_priority(&supported_parameters, catalog_entry);
     let description = compatible_description(&model, &supported_parameters, catalog_entry);
@@ -327,6 +339,7 @@ fn openai_compatible_model_info_from_id(model: OpenAiCompatibleModel) -> ModelIn
         description,
         default_reasoning_level,
         supported_reasoning_levels,
+        reasoning_control,
         shell_type: ConfigShellToolType::Default,
         visibility,
         supported_in_api: true,
@@ -404,6 +417,27 @@ fn supported_reasoning_levels_from_metadata(
         .unwrap_or_default()
 }
 
+fn reasoning_control_from_metadata(
+    supported_parameters: &[String],
+    catalog_entry: Option<&CompatibleModelCatalogEntry>,
+) -> ReasoningControl {
+    if let Some(entry) = catalog_entry {
+        if entry.reasoning_control != ReasoningControl::None {
+            return entry.reasoning_control;
+        }
+        if entry.supports_thinking_toggle {
+            return ReasoningControl::ThinkingToggle;
+        }
+    }
+    if supports_thinking_toggle_parameter(supported_parameters) {
+        return ReasoningControl::ThinkingToggle;
+    }
+    if supports_reasoning_effort_parameter(supported_parameters) {
+        return ReasoningControl::Effort;
+    }
+    ReasoningControl::None
+}
+
 fn compatible_description(
     model: &OpenAiCompatibleModel,
     supported_parameters: &[String],
@@ -419,6 +453,10 @@ fn compatible_description(
     }
     if supports_reasoning_effort_parameter(supported_parameters) {
         capability_tags.push("Reasoning effort");
+    } else if reasoning_control_from_metadata(supported_parameters, catalog_entry)
+        != ReasoningControl::None
+    {
+        capability_tags.push("Reasoning");
     } else if supports_reasoning_parameter(supported_parameters) {
         capability_tags.push("Reasoning");
     }
@@ -546,6 +584,11 @@ fn supports_reasoning_effort_parameter(supported_parameters: &[String]) -> bool 
 fn supports_reasoning_parameter(supported_parameters: &[String]) -> bool {
     has_supported_parameter(supported_parameters, "reasoning")
         || has_supported_parameter(supported_parameters, "include_reasoning")
+}
+
+fn supports_thinking_toggle_parameter(supported_parameters: &[String]) -> bool {
+    has_supported_parameter(supported_parameters, "thinking")
+        || has_supported_parameter(supported_parameters, "enable_thinking")
 }
 
 fn supports_search_parameter(supported_parameters: &[String]) -> bool {

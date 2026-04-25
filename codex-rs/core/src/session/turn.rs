@@ -1861,6 +1861,7 @@ async fn try_run_sampling_request(
     let mut in_flight: FuturesOrdered<BoxFuture<'static, CodexResult<ResponseInputItem>>> =
         FuturesOrdered::new();
     let mut needs_follow_up = false;
+    let mut tool_call_seen_in_response = false;
     let mut last_agent_message: Option<String> = None;
     let mut active_item: Option<TurnItem> = None;
     let mut active_tool_argument_diff_consumer: Option<(
@@ -1974,6 +1975,7 @@ async fn try_run_sampling_request(
                         Err(err) => break Err(err),
                     };
                 if let Some(tool_future) = output_result.tool_future {
+                    tool_call_seen_in_response = true;
                     in_flight.push_back(tool_future);
                 }
                 let had_last_agent_message = output_result.last_agent_message.is_some();
@@ -1981,11 +1983,11 @@ async fn try_run_sampling_request(
                     last_agent_message = Some(agent_message);
                 }
                 if output_result.needs_follow_up {
+                    tool_call_seen_in_response = true;
                     needs_follow_up = true;
-                } else if had_last_agent_message {
-                    // Claude-style harnesses can emit a tool call and then finish the same
-                    // response with a terminal assistant message. In that case the follow-up
-                    // loop must stop instead of resubmitting the pre-terminal tool-result state.
+                } else if had_last_agent_message && !tool_call_seen_in_response {
+                    // A text-only response is terminal; mixed text + tool responses still need a
+                    // follow-up turn so the model can observe the tool outputs.
                     needs_follow_up = false;
                 }
                 // todo: remove before stabilizing multi-agent v2

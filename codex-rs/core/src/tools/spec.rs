@@ -118,6 +118,8 @@ pub(crate) fn build_specs_with_discoverable_tools(
     use crate::tools::handlers::ListDirHandler;
     use crate::tools::handlers::McpHandler;
     use crate::tools::handlers::McpResourceHandler;
+    use crate::tools::handlers::MinimalBashHandler;
+    use crate::tools::handlers::MinimalStrReplaceEditorHandler;
     use crate::tools::handlers::PlanHandler;
     use crate::tools::handlers::RequestPermissionsHandler;
     use crate::tools::handlers::RequestUserInputHandler;
@@ -361,6 +363,12 @@ pub(crate) fn build_specs_with_discoverable_tools(
             }
             ToolHandlerKind::McpResource => {
                 builder.register_handler(handler.name, mcp_resource_handler.clone());
+            }
+            ToolHandlerKind::MinimalBash => {
+                builder.register_handler(handler.name, Arc::new(MinimalBashHandler));
+            }
+            ToolHandlerKind::MinimalStrReplaceEditor => {
+                builder.register_handler(handler.name, Arc::new(MinimalStrReplaceEditorHandler));
             }
             ToolHandlerKind::Plan => {
                 builder.register_handler(handler.name, plan_handler.clone());

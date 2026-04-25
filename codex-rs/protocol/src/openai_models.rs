@@ -59,6 +59,37 @@ impl FromStr for ReasoningEffort {
     }
 }
 
+/// How a model's reasoning behavior can be controlled by the client UI/API.
+#[derive(
+    Debug,
+    Serialize,
+    Deserialize,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    TS,
+    Hash,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum ReasoningControl {
+    /// No known reasoning control.
+    #[default]
+    None,
+    /// Reasoning exists, but this client should not show a user-facing control.
+    Fixed,
+    /// OpenAI-style enum control such as low/medium/high.
+    Effort,
+    /// Boolean thinking on/off control.
+    ThinkingToggle,
+    /// Token-budget thinking control.
+    ThinkingBudget,
+}
+
 /// Canonical user-input modality tags advertised by a model.
 #[derive(
     Debug,
@@ -130,6 +161,12 @@ pub struct ModelPreset {
     pub default_reasoning_effort: ReasoningEffort,
     /// Supported reasoning effort options.
     pub supported_reasoning_efforts: Vec<ReasoningEffortPreset>,
+    /// User-facing reasoning control shape advertised by model metadata.
+    #[serde(default)]
+    pub reasoning_control: ReasoningControl,
+    /// Whether this model supports a boolean thinking on/off toggle.
+    #[serde(default)]
+    pub supports_thinking_toggle: bool,
     /// Whether this model supports personality-specific instructions.
     #[serde(default)]
     pub supports_personality: bool,
@@ -252,6 +289,9 @@ pub struct ModelInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_reasoning_level: Option<ReasoningEffort>,
     pub supported_reasoning_levels: Vec<ReasoningEffortPreset>,
+    /// User-facing reasoning control shape advertised by model metadata.
+    #[serde(default)]
+    pub reasoning_control: ReasoningControl,
     pub shell_type: ConfigShellToolType,
     pub visibility: ModelVisibility,
     pub supported_in_api: bool,
@@ -440,6 +480,11 @@ impl From<ModelInfo> for ModelPreset {
                 .default_reasoning_level
                 .unwrap_or(ReasoningEffort::None),
             supported_reasoning_efforts: info.supported_reasoning_levels.clone(),
+            reasoning_control: info.reasoning_control,
+            supports_thinking_toggle: matches!(
+                info.reasoning_control,
+                ReasoningControl::ThinkingToggle | ReasoningControl::ThinkingBudget
+            ),
             supports_personality,
             additional_speed_tiers: info.additional_speed_tiers,
             is_default: false, // default is the highest priority available model
@@ -543,6 +588,7 @@ mod tests {
             description: None,
             default_reasoning_level: None,
             supported_reasoning_levels: vec![],
+            reasoning_control: ReasoningControl::None,
             shell_type: ConfigShellToolType::ShellCommand,
             visibility: ModelVisibility::List,
             supported_in_api: true,
@@ -786,6 +832,21 @@ mod tests {
         assert!(!model.supports_image_detail_original);
         assert_eq!(model.web_search_tool_type, WebSearchToolType::Text);
         assert!(!model.supports_search_tool);
+    }
+
+    #[test]
+    fn model_preset_uses_explicit_reasoning_control_for_thinking_toggle() {
+        let mut model = test_model(None);
+        model.default_reasoning_level = Some(ReasoningEffort::Medium);
+        model.reasoning_control = ReasoningControl::Fixed;
+        let preset = ModelPreset::from(model.clone());
+        assert_eq!(preset.reasoning_control, ReasoningControl::Fixed);
+        assert!(!preset.supports_thinking_toggle);
+
+        model.reasoning_control = ReasoningControl::ThinkingToggle;
+        let preset = ModelPreset::from(model);
+        assert_eq!(preset.reasoning_control, ReasoningControl::ThinkingToggle);
+        assert!(preset.supports_thinking_toggle);
     }
 
     #[test]

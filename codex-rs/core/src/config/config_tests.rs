@@ -5455,6 +5455,51 @@ fn kimi_like_provider_defaults_to_kimi_cli_harness() -> std::io::Result<()> {
 }
 
 #[test]
+fn deepseek_provider_defaults_to_minimal_harness() -> std::io::Result<()> {
+    let cwd_temp_dir = TempDir::new().expect("temp dir");
+    std::fs::write(cwd_temp_dir.path().join(".git"), "gitdir: nowhere")?;
+    let codex_home_temp_dir = TempDir::new().expect("temp dir");
+
+    let cfg = ConfigToml {
+        model_provider: Some("deepseek".to_string()),
+        model_providers: HashMap::from([(
+            "deepseek".to_string(),
+            ModelProviderInfo {
+                name: "DeepSeek".to_string(),
+                base_url: Some("https://api.deepseek.com".to_string()),
+                env_key: Some("DEEPSEEK_API_KEY".to_string()),
+                env_key_instructions: None,
+                experimental_bearer_token: None,
+                auth: None,
+                wire_api: WireApi::Chat,
+                query_params: None,
+                http_headers: None,
+                env_http_headers: None,
+                request_max_retries: None,
+                stream_max_retries: None,
+                stream_idle_timeout_ms: None,
+                websocket_connect_timeout_ms: None,
+                requires_openai_auth: false,
+                supports_websockets: false,
+            },
+        )]),
+        ..Default::default()
+    };
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides {
+            cwd: Some(cwd_temp_dir.path().to_path_buf()),
+            ..Default::default()
+        },
+        codex_home_temp_dir.path().to_path_buf(),
+    )?;
+
+    assert_eq!(config.harness.as_deref(), Some("minimal"));
+    Ok(())
+}
+
+#[test]
 fn profile_harness_overrides_provider_default_harness() -> std::io::Result<()> {
     let cwd_temp_dir = TempDir::new().expect("temp dir");
     std::fs::write(cwd_temp_dir.path().join(".git"), "gitdir: nowhere")?;

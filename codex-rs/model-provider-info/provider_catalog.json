@@ -5527,25 +5527,29 @@
       "sort_priority": 32,
       "models": [
         {
-          "id": "deepseek-chat",
-          "display_name": "DeepSeek Chat",
-          "description": "deepseek \u2022 Tool calling",
-          "reasoning": false,
+          "id": "deepseek-v4-flash",
+          "display_name": "DeepSeek V4 Flash",
+          "description": "deepseek \u2022 Thinking toggle \u2022 Tool calling",
+          "reasoning": true,
+          "thinking_toggle": true,
+          "reasoning_control": "thinking_toggle",
           "input_modalities": [
             "text"
           ],
-          "context_window": 131072,
+          "context_window": 1000000,
           "priority": 0
         },
         {
-          "id": "deepseek-reasoner",
-          "display_name": "DeepSeek Reasoner",
-          "description": "deepseek-thinking \u2022 Reasoning \u2022 Tool calling",
+          "id": "deepseek-v4-pro",
+          "display_name": "DeepSeek V4 Pro",
+          "description": "deepseek \u2022 Thinking toggle \u2022 Tool calling",
           "reasoning": true,
+          "thinking_toggle": true,
+          "reasoning_control": "thinking_toggle",
           "input_modalities": [
             "text"
           ],
-          "context_window": 128000,
+          "context_window": 1000000,
           "priority": 1
         }
       ]

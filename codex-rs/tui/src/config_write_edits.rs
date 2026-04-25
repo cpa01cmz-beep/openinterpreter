@@ -97,6 +97,10 @@ pub(crate) fn preferred_harness_for_provider(
     base_url: Option<&str>,
     wire_api: Option<WireApi>,
 ) -> Option<&'static str> {
+    if is_deepseek_provider(provider_id, provider_name, base_url) {
+        return Some("minimal");
+    }
+
     if is_kimi_provider(provider_id, provider_name, base_url) {
         return Some("kimi-cli");
     }
@@ -116,6 +120,20 @@ pub(crate) fn preferred_harness_for_provider(
     } else {
         None
     }
+}
+
+fn is_deepseek_provider(
+    provider_id: &str,
+    provider_name: Option<&str>,
+    base_url: Option<&str>,
+) -> bool {
+    let provider_id = provider_id.to_ascii_lowercase();
+    let provider_name = provider_name.unwrap_or_default().to_ascii_lowercase();
+    let base_url = base_url.unwrap_or_default().to_ascii_lowercase();
+
+    provider_id.contains("deepseek")
+        || provider_name.contains("deepseek")
+        || base_url.contains("api.deepseek.com")
 }
 
 fn is_kimi_provider(
@@ -340,6 +358,29 @@ mod tests {
                 "work".to_string(),
                 "harness".to_string(),
             ])
+        );
+    }
+
+    #[test]
+    fn provider_model_selection_sets_minimal_harness_for_deepseek() {
+        let edits = provider_model_selection_edits(
+            Some("work"),
+            "deepseek",
+            None,
+            Some("deepseek-chat"),
+            None,
+        );
+
+        assert_eq!(
+            edits[1],
+            set_path(
+                vec![
+                    "profiles".to_string(),
+                    "work".to_string(),
+                    "harness".to_string(),
+                ],
+                json!("minimal"),
+            )
         );
     }
 

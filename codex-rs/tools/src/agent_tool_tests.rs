@@ -18,6 +18,8 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
             effort: ReasoningEffort::Medium,
             description: "Balanced".to_string(),
         }],
+        reasoning_control: codex_protocol::openai_models::ReasoningControl::Effort,
+        supports_thinking_toggle: false,
         supports_personality: false,
         additional_speed_tiers: Vec::new(),
         is_default: false,

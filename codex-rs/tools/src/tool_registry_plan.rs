@@ -63,6 +63,8 @@ use crate::create_list_dir_tool;
 use crate::create_list_mcp_resource_templates_tool;
 use crate::create_list_mcp_resources_tool;
 use crate::create_local_shell_tool;
+use crate::create_minimal_bash_tool;
+use crate::create_minimal_str_replace_editor_tool;
 use crate::create_read_mcp_resource_tool;
 use crate::create_report_agent_job_result_tool;
 use crate::create_request_permissions_tool;
@@ -104,6 +106,7 @@ pub fn build_tool_registry_plan(
     let exec_permission_approvals_enabled = config.exec_permission_approvals_enabled;
     let using_claude_code = config.harness.is_claude_code();
     let using_kimi_cli = config.harness.is_kimi_cli();
+    let using_minimal = config.harness.is_minimal();
 
     if config.code_mode_enabled && !using_claude_code && !using_kimi_cli {
         let namespace_descriptions = params
@@ -399,6 +402,29 @@ pub fn build_tool_registry_plan(
             plan.register_handler("FetchURL", ToolHandlerKind::KimiFetchUrl);
             plan.register_handler("ExitPlanMode", ToolHandlerKind::KimiExitPlanMode);
             plan.register_handler("EnterPlanMode", ToolHandlerKind::KimiEnterPlanMode);
+        }
+
+        apply_tool_name_filters(&mut plan, config);
+        return plan;
+    }
+
+    if using_minimal {
+        if config.has_environment {
+            plan.push_spec(
+                create_minimal_bash_tool(),
+                /*supports_parallel_tool_calls*/ false,
+                /*code_mode_enabled*/ false,
+            );
+            plan.push_spec(
+                create_minimal_str_replace_editor_tool(),
+                /*supports_parallel_tool_calls*/ false,
+                /*code_mode_enabled*/ false,
+            );
+            plan.register_handler("bash", ToolHandlerKind::MinimalBash);
+            plan.register_handler(
+                "str_replace_editor",
+                ToolHandlerKind::MinimalStrReplaceEditor,
+            );
         }
 
         apply_tool_name_filters(&mut plan, config);

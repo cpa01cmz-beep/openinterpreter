@@ -10,6 +10,7 @@ pub(crate) enum MessagesHarnessRoute {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum ChatHarnessRoute {
     KimiCli,
+    Minimal,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -41,12 +42,18 @@ pub(crate) fn resolve_stream_transport_route(
         (WireApi::Chat, Harness::KimiCli) => {
             Ok(StreamTransportRoute::ChatHarness(ChatHarnessRoute::KimiCli))
         }
+        (WireApi::Chat, Harness::Minimal) => {
+            Ok(StreamTransportRoute::ChatHarness(ChatHarnessRoute::Minimal))
+        }
         (WireApi::Chat, _) => Ok(StreamTransportRoute::ChatCompletionsCompat),
         (WireApi::Messages, Harness::ClaudeCode) => Ok(StreamTransportRoute::MessagesHarness(
             MessagesHarnessRoute::ClaudeCode,
         )),
         (WireApi::Messages, Harness::KimiCli) => Err(CodexErr::InvalidRequest(
             "wire_api = \"messages\" is not supported by harness = \"kimi-cli\"".to_string(),
+        )),
+        (WireApi::Messages, Harness::Minimal) => Err(CodexErr::InvalidRequest(
+            "wire_api = \"messages\" is not supported by harness = \"minimal\"".to_string(),
         )),
         (WireApi::Messages, Harness::Native) => Err(CodexErr::InvalidRequest(
             "wire_api = \"messages\" requires a harness-native transport; configure harness = \"claude-code\" for Anthropic-style sessions"
@@ -124,6 +131,15 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "wire_api = \"messages\" is not supported by harness = \"kimi-cli\""
+        );
+    }
+
+    #[test]
+    fn minimal_chat_wire_uses_harness_native_chat_route() {
+        assert_eq!(
+            resolve_stream_transport_route(WireApi::Chat, &Harness::Minimal)
+                .expect("minimal route"),
+            StreamTransportRoute::ChatHarness(ChatHarnessRoute::Minimal)
         );
     }
 }

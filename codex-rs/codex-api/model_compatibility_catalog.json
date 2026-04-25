@@ -16529,6 +16529,46 @@
       "context_window": 131072
     },
     {
+      "id": "deepseek-v4-flash",
+      "aliases": [],
+      "description": "Chat-compatible \u2022 Thinking toggle \u2022 Tool calling",
+      "visibility": "list",
+      "supported_parameters": [
+        "tools",
+        "tool_choice",
+        "thinking"
+      ],
+      "supported_reasoning_levels": [],
+      "supports_thinking_toggle": true,
+      "reasoning_control": "thinking_toggle",
+      "supports_parallel_tool_calls": true,
+      "supports_search_tool": false,
+      "input_modalities": [
+        "text"
+      ],
+      "context_window": 1000000
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "aliases": [],
+      "description": "Chat-compatible \u2022 Thinking toggle \u2022 Tool calling",
+      "visibility": "list",
+      "supported_parameters": [
+        "tools",
+        "tool_choice",
+        "thinking"
+      ],
+      "supported_reasoning_levels": [],
+      "supports_thinking_toggle": true,
+      "reasoning_control": "thinking_toggle",
+      "supports_parallel_tool_calls": true,
+      "supports_search_tool": false,
+      "input_modalities": [
+        "text"
+      ],
+      "context_window": 1000000
+    },
+    {
       "id": "deepseek-chat",
       "aliases": [],
       "description": "Chat-compatible \u2022 Tool calling",

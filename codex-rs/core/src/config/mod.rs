@@ -1403,6 +1403,12 @@ fn default_harness_for_model_provider(
         .as_deref()
         .unwrap_or_default()
         .to_ascii_lowercase();
+    if provider_id.contains("deepseek")
+        || provider_name.contains("deepseek")
+        || base_url.contains("api.deepseek.com")
+    {
+        return Some("minimal".to_string());
+    }
     if provider_id.contains("kimi")
         || provider_id.contains("moonshot")
         || provider_name.contains("kimi")

@@ -57,6 +57,8 @@ pub enum ToolHandlerKind {
     ListDir,
     Mcp,
     McpResource,
+    MinimalBash,
+    MinimalStrReplaceEditor,
     Plan,
     RequestPermissions,
     RequestUserInput,

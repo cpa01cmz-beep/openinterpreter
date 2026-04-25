@@ -4,6 +4,7 @@ pub enum Harness {
     Native,
     ClaudeCode,
     KimiCli,
+    Minimal,
     Other(String),
 }
 
@@ -13,6 +14,7 @@ impl Harness {
             None | Some("") => Self::Native,
             Some("claude-code") => Self::ClaudeCode,
             Some("kimi-cli") => Self::KimiCli,
+            Some("minimal") => Self::Minimal,
             Some(other) => Self::Other(other.to_string()),
         }
     }
@@ -23,6 +25,10 @@ impl Harness {
 
     pub fn is_kimi_cli(&self) -> bool {
         matches!(self, Self::KimiCli)
+    }
+
+    pub fn is_minimal(&self) -> bool {
+        matches!(self, Self::Minimal)
     }
 }
 
@@ -42,5 +48,6 @@ mod tests {
             Harness::from_config_name(Some("kimi-cli")),
             Harness::KimiCli
         );
+        assert_eq!(Harness::from_config_name(Some("minimal")), Harness::Minimal);
     }
 }

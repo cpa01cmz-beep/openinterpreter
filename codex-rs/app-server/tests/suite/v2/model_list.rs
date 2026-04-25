@@ -44,6 +44,8 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
             })
             .collect(),
         default_reasoning_effort: preset.default_reasoning_effort,
+        reasoning_control: preset.reasoning_control,
+        supports_thinking_toggle: preset.supports_thinking_toggle,
         additional_speed_tiers: preset.additional_speed_tiers.clone(),
         input_modalities: preset.input_modalities.clone(),
         supports_personality: preset.supports_personality,

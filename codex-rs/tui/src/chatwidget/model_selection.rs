@@ -63,26 +63,45 @@ impl ChatWidget {
     }
 
     pub(crate) fn supported_reasoning_choice_count(preset: &ModelPreset) -> usize {
-        let count = ReasoningEffortConfig::iter()
-            .filter(|effort| {
-                preset
-                    .supported_reasoning_efforts
-                    .iter()
-                    .any(|option| option.effort == *effort)
-            })
-            .count();
-        if count > 0 {
-            count
+        if Self::single_supported_reasoning_effort(preset).is_some() {
+            1
         } else if Self::supports_thinking_toggle_only(preset) {
             2
         } else {
-            1
+            ReasoningEffortConfig::iter()
+                .filter(|effort| {
+                    preset
+                        .supported_reasoning_efforts
+                        .iter()
+                        .any(|option| option.effort == *effort)
+                })
+                .count()
         }
     }
 
     pub(crate) fn supports_thinking_toggle_only(preset: &ModelPreset) -> bool {
-        preset.supported_reasoning_efforts.is_empty()
-            && preset.default_reasoning_effort != ReasoningEffortConfig::None
+        preset.supports_thinking_toggle && preset.supported_reasoning_efforts.is_empty()
+    }
+
+    pub(crate) fn single_supported_reasoning_effort(
+        preset: &ModelPreset,
+    ) -> Option<Option<ReasoningEffortConfig>> {
+        if preset.supported_reasoning_efforts.is_empty() {
+            return (!preset.supports_thinking_toggle).then_some(None);
+        }
+
+        let mut choices = ReasoningEffortConfig::iter().filter(|effort| {
+            preset
+                .supported_reasoning_efforts
+                .iter()
+                .any(|option| option.effort == *effort)
+        });
+        let first = choices.next()?;
+        if choices.next().is_none() {
+            Some(Some(first))
+        } else {
+            None
+        }
     }
 
     pub(crate) fn set_model_catalog(&mut self, model_catalog: Arc<ModelCatalog>) {
@@ -427,20 +446,31 @@ impl ChatWidget {
                 let preset_for_action = preset.clone();
                 let provider_id_for_action = provider_id.clone();
                 let provider_name_for_action = provider_name.clone();
-                let single_supported_effort = Self::supported_reasoning_choice_count(&preset) == 1;
-                let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-                    tx.send(AppEvent::OpenReasoningPopupForProvider {
-                        provider_id: provider_id_for_action.clone(),
-                        provider_name: provider_name_for_action.clone(),
-                        model: preset_for_action.clone(),
-                    });
-                })];
+                let single_supported_effort = Self::single_supported_reasoning_effort(&preset);
+                let actions: Vec<SelectionAction> = if let Some(effort) = single_supported_effort {
+                    vec![Box::new(move |tx| {
+                        tx.send(AppEvent::PersistProviderModelSelection {
+                            provider_id: provider_id_for_action.clone(),
+                            provider_name: provider_name_for_action.clone(),
+                            model: preset_for_action.model.clone(),
+                            effort,
+                        });
+                    })]
+                } else {
+                    vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenReasoningPopupForProvider {
+                            provider_id: provider_id_for_action.clone(),
+                            provider_name: provider_name_for_action.clone(),
+                            model: preset_for_action.clone(),
+                        });
+                    })]
+                };
                 SelectionItem {
                     name: preset.model.clone(),
                     description,
                     is_default: preset.is_default,
                     actions,
-                    dismiss_on_select: single_supported_effort,
+                    dismiss_on_select: single_supported_effort.is_some(),
                     search_value: Some(format!(
                         "{} {} {}",
                         preset.model, preset.display_name, preset.description
@@ -481,9 +511,7 @@ impl ChatWidget {
             };
         let header = self.model_menu_header(title.as_str(), subtitle.as_str());
         self.bottom_pane.show_selection_view(SelectionViewParams {
-            footer_hint: Some(
-                "Type to filter • Enter to configure reasoning • Esc to dismiss".into(),
-            ),
+            footer_hint: Some("Type to filter • Enter to select • Esc to dismiss".into()),
             items,
             header,
             is_searchable: true,
@@ -555,7 +583,7 @@ impl ChatWidget {
         let supported = preset.supported_reasoning_efforts;
 
         if supported.is_empty() {
-            if default_effort == ReasoningEffortConfig::None {
+            if !preset.supports_thinking_toggle {
                 self.app_event_tx
                     .send(AppEvent::PersistProviderModelSelection {
                         provider_id,

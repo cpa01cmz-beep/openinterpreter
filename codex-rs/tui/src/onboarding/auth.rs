@@ -3124,6 +3124,8 @@ mod tests {
                     description: "Balanced reasoning".to_string(),
                 },
             ],
+            reasoning_control: codex_protocol::openai_models::ReasoningControl::Effort,
+            supports_thinking_toggle: false,
             supports_personality: false,
             is_default: false,
             upgrade: None,
