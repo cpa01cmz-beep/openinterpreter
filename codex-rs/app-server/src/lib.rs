@@ -15,9 +15,11 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
 use std::io::Result as IoResult;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 use crate::config_manager::ConfigManager;
 use crate::message_processor::MessageProcessor;
@@ -55,6 +57,7 @@ use codex_state::log_db;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tokio::time::Sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::Level;
 use tracing::error;
@@ -360,6 +363,7 @@ pub async fn run_main(
         AppServerTransport::Stdio,
         SessionSource::VSCode,
         AppServerWebsocketAuthSettings::default(),
+        None,
     )
     .await
 }
@@ -372,6 +376,7 @@ pub async fn run_main_with_transport(
     transport: AppServerTransport,
     session_source: SessionSource,
     auth: AppServerWebsocketAuthSettings,
+    shutdown_idle_timeout: Option<Duration>,
 ) -> IoResult<()> {
     let environment_manager = Arc::new(EnvironmentManager::new(EnvironmentManagerArgs::from_env(
         ExecServerRuntimePaths::from_optional_paths(
@@ -693,6 +698,7 @@ pub async fn run_main_with_transport(
         async move {
             let mut listen_for_threads = true;
             let mut shutdown_state = ShutdownState::default();
+            let mut idle_shutdown_sleep: Option<Pin<Box<Sleep>>> = None;
             loop {
                 let running_turn_count = {
                     let running_turn_count = running_turn_count_rx.borrow();
@@ -733,6 +739,7 @@ pub async fn run_main_with_transport(
                                 writer,
                                 disconnect_sender,
                             } => {
+                                idle_shutdown_sleep = None;
                                 let outbound_initialized = Arc::new(AtomicBool::new(false));
                                 let outbound_experimental_api_enabled =
                                     Arc::new(AtomicBool::new(false));
@@ -780,6 +787,11 @@ pub async fn run_main_with_transport(
                                 processor.connection_closed(connection_id).await;
                                 if shutdown_when_no_connections && connections.is_empty() {
                                     break;
+                                }
+                                if !shutdown_when_no_connections && connections.is_empty() {
+                                    idle_shutdown_sleep = shutdown_idle_timeout.map(|timeout| {
+                                        Box::pin(tokio::time::sleep(timeout))
+                                    });
                                 }
                             }
                             TransportEvent::IncomingMessage { connection_id, message } => {
@@ -858,6 +870,18 @@ pub async fn run_main_with_transport(
                                 }
                             }
                         }
+                    }
+                    _ = async {
+                        if let Some(sleep) = &mut idle_shutdown_sleep {
+                            sleep.as_mut().await;
+                        }
+                    }, if idle_shutdown_sleep.is_some() => {
+                        info!("app-server idle timeout elapsed; shutting down");
+                        transport_shutdown_token.cancel();
+                        let _ = outbound_control_tx
+                            .send(OutboundControlEvent::DisconnectAll)
+                            .await;
+                        break;
                     }
                     created = thread_created_rx.recv(), if listen_for_threads => {
                         match created {

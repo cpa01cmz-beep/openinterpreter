@@ -2036,6 +2036,7 @@ mod tests {
             forked_from_id: None,
             preview: String::from("remote thread"),
             ephemeral: false,
+            model: Some(String::from("gpt-5")),
             model_provider: String::from("openai"),
             created_at: 1,
             updated_at: 2,

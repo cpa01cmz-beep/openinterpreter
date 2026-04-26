@@ -1131,8 +1131,8 @@ fn build_billing_header_version(first_user_text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contextual_user_message::USER_SHELL_COMMAND_CLOSE_TAG;
-    use crate::contextual_user_message::USER_SHELL_COMMAND_OPEN_TAG;
+    use crate::context::ContextualUserFragment;
+    use crate::context::UserShellCommand;
     use codex_protocol::models::BaseInstructions;
     use codex_protocol::models::ContentItem;
     use codex_protocol::models::FunctionCallOutputPayload;
@@ -1141,6 +1141,10 @@ mod tests {
     use std::path::PathBuf;
 
     const CLAUDE_TODO_WRITE_SUCCESS_MESSAGE: &str = "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable";
+    const USER_SHELL_COMMAND_OPEN_TAG: &str =
+        <UserShellCommand as ContextualUserFragment>::START_MARKER;
+    const USER_SHELL_COMMAND_CLOSE_TAG: &str =
+        <UserShellCommand as ContextualUserFragment>::END_MARKER;
 
     fn test_model_info(slug: &str) -> ModelInfo {
         serde_json::from_value(serde_json::json!({

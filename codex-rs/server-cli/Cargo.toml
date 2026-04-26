@@ -13,10 +13,6 @@ name = "interpreter-tui"
 path = "src/bin/interpreter_tui.rs"
 
 [[bin]]
-name = "interpreter-root-tui"
-path = "src/bin/interpreter_root_tui.rs"
-
-[[bin]]
 name = "interpreter-app-server"
 path = "src/bin/interpreter_app_server.rs"
 
@@ -31,6 +27,7 @@ workspace = true
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 codex-app-server = { workspace = true }
+codex-app-server-launcher = { workspace = true }
 codex-arg0 = { workspace = true }
 codex-core = { workspace = true }
 codex-git-utils = { workspace = true }
@@ -40,17 +37,13 @@ codex-protocol = { workspace = true }
 codex-tui = { path = "../tui", default-features = false, features = ["thin-client", "direct-login", "extended-mentions", "rich-media", "structured-mcp-content"] }
 codex-utils-cli = { workspace = true }
 codex-utils-home-dir = { workspace = true }
-codex-utils-pty = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
-reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sysinfo = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml = { workspace = true }
 url = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 which = { workspace = true }
 
 [dev-dependencies]

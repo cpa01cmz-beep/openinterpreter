@@ -42,7 +42,7 @@ default = [
     "terminal-default-color-probe",
     "telemetry",
 ]
-thin-client = ["system-browser"]
+thin-client = []
 direct-login = ["dep:codex-login"]
 logging = ["dep:tracing-appender", "dep:tracing-subscriber"]
 startup-network = ["dep:reqwest", "direct-login"]
@@ -58,7 +58,7 @@ embedded-app-server = [
 feedback = ["dep:codex-feedback"]
 local-state-db = ["dep:codex-rollout", "dep:codex-state"]
 oss-local-bootstrap = ["dep:codex-utils-oss"]
-realtime-audio = ["dep:cpal"]
+realtime-audio = ["dep:codex-realtime-webrtc", "dep:cpal"]
 rich-media = ["dep:image"]
 sleep-inhibitor = ["dep:codex-utils-sleep-inhibitor"]
 structured-mcp-content = ["dep:rmcp"]
@@ -96,7 +96,7 @@ codex-model-provider-info = { workspace = true }
 codex-models-manager = { workspace = true }
 codex-otel = { workspace = true, optional = true }
 codex-protocol = { workspace = true }
-codex-realtime-webrtc = { workspace = true }
+codex-realtime-webrtc = { workspace = true, optional = true }
 codex-rollout = { workspace = true, optional = true }
 codex-shell-command = { workspace = true }
 codex-state = { workspace = true, optional = true }

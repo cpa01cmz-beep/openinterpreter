@@ -359,6 +359,7 @@ async fn live_app_server_dynamic_tool_call_renders_visible_tool_activity() {
             turn_id: "turn-1".to_string(),
             item: AppServerThreadItem::DynamicToolCall {
                 id: "tool-1".to_string(),
+                namespace: None,
                 tool: "Read".to_string(),
                 arguments: json!({ "file_path": "README.md" }),
                 status: AppServerDynamicToolCallStatus::InProgress,
@@ -387,6 +388,7 @@ async fn live_app_server_dynamic_tool_call_renders_visible_tool_activity() {
             turn_id: "turn-1".to_string(),
             item: AppServerThreadItem::DynamicToolCall {
                 id: "tool-1".to_string(),
+                namespace: None,
                 tool: "Read".to_string(),
                 arguments: json!({ "file_path": "README.md" }),
                 status: AppServerDynamicToolCallStatus::Completed,
@@ -408,6 +410,65 @@ async fn live_app_server_dynamic_tool_call_renders_visible_tool_activity() {
     assert!(
         completed.contains("Open Interpreter README excerpt"),
         "expected dynamic tool result content to be visible, got: {completed}"
+    );
+}
+
+#[tokio::test]
+async fn live_app_server_dynamic_tool_call_request_and_item_started_do_not_duplicate() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    let params = codex_app_server_protocol::DynamicToolCallParams {
+        thread_id: "thread-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        call_id: "tool-1".to_string(),
+        namespace: None,
+        tool: "Read".to_string(),
+        arguments: json!({ "file_path": "README.md" }),
+    };
+
+    chat.handle_server_request(
+        codex_app_server_protocol::ServerRequest::DynamicToolCall {
+            request_id: codex_app_server_protocol::RequestId::Integer(1),
+            params: params.clone(),
+        },
+        /*replay_kind*/ None,
+    );
+
+    assert!(drain_insert_history(&mut rx).is_empty());
+    let first_running = active_blob(&chat);
+    assert_eq!(
+        first_running.matches("Calling Read").count(),
+        1,
+        "expected one active dynamic tool call after request, got: {first_running}"
+    );
+
+    chat.handle_server_notification(
+        ServerNotification::ItemStarted(ItemStartedNotification {
+            thread_id: params.thread_id.clone(),
+            turn_id: params.turn_id.clone(),
+            item: AppServerThreadItem::DynamicToolCall {
+                id: params.call_id.clone(),
+                namespace: params.namespace.clone(),
+                tool: params.tool.clone(),
+                arguments: params.arguments.clone(),
+                status: AppServerDynamicToolCallStatus::InProgress,
+                content_items: None,
+                success: None,
+                duration_ms: None,
+            },
+        }),
+        /*replay_kind*/ None,
+    );
+
+    assert!(
+        drain_insert_history(&mut rx).is_empty(),
+        "duplicate start event should not flush the active call into history"
+    );
+    let second_running = active_blob(&chat);
+    assert_eq!(
+        second_running.matches("Calling Read").count(),
+        1,
+        "expected duplicate start event to keep one active call, got: {second_running}"
     );
 }
 

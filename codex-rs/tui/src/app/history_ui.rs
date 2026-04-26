@@ -7,12 +7,23 @@ use super::*;
 
 impl App {
     pub(super) fn open_url_in_browser(&mut self, url: String) {
+        #[cfg(not(feature = "system-browser"))]
+        {
+            self.chat_widget.add_info_message(
+                format!("Open this URL in your browser: {url}"),
+                /*hint*/ None,
+            );
+            return;
+        }
+
+        #[cfg(feature = "system-browser")]
         if let Err(err) = webbrowser::open(&url) {
             self.chat_widget
                 .add_error_message(format!("Failed to open browser for {url}: {err}"));
             return;
         }
 
+        #[cfg(feature = "system-browser")]
         self.chat_widget
             .add_info_message(format!("Opened {url} in your browser."), /*hint*/ None);
     }

@@ -4450,6 +4450,19 @@ impl ChatWidget {
     }
 
     fn on_dynamic_tool_call_request(&mut self, ev: DynamicToolCallRequest) {
+        let is_same_active_call = self
+            .active_cell
+            .as_mut()
+            .and_then(|cell| {
+                cell.as_any_mut()
+                    .downcast_mut::<history_cell::DynamicToolCallCell>()
+            })
+            .is_some_and(|cell| cell.call_id() == ev.call_id);
+        if is_same_active_call {
+            self.request_redraw();
+            return;
+        }
+
         self.flush_answer_stream_with_separator();
         self.flush_active_cell();
         self.active_cell = Some(Box::new(history_cell::new_active_dynamic_tool_call(

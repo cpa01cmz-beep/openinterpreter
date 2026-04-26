@@ -98,6 +98,19 @@ fn build_messages(
                         }));
                     }
                 }
+                "developer" => {
+                    flush_pending_tool_calls(
+                        &mut messages,
+                        &mut pending_tool_calls,
+                        &mut pending_tool_call_content,
+                    );
+                    if let Some(message_content) = convert_message_content(content) {
+                        messages.push(json!({
+                            "role": "user",
+                            "content": message_content,
+                        }));
+                    }
+                }
                 _ => {}
             },
             ResponseItem::FunctionCall {
@@ -359,5 +372,49 @@ mod tests {
         .expect("build request");
 
         assert_eq!(request.get("thinking"), Some(&json!({"type": "disabled"})));
+    }
+
+    #[test]
+    fn developer_messages_are_preserved_as_user_messages() {
+        let prompt = Prompt {
+            input: vec![
+                ResponseItem::Message {
+                    id: Some("developer".to_string()),
+                    role: "developer".to_string(),
+                    content: vec![ContentItem::InputText {
+                        text: "<skills_instructions>\n- imagegen\n</skills_instructions>"
+                            .to_string(),
+                    }],
+                    end_turn: None,
+                    phase: None,
+                },
+                ResponseItem::Message {
+                    id: Some("user".to_string()),
+                    role: "user".to_string(),
+                    content: vec![ContentItem::InputText {
+                        text: "$imagegen what is this".to_string(),
+                    }],
+                    end_turn: None,
+                    phase: None,
+                },
+            ],
+            cwd: Some(std::env::temp_dir()),
+            ..Prompt::default()
+        };
+
+        let (request, _) =
+            build_request(&prompt, &thinking_toggle_model_info(), None).expect("build request");
+        let messages = request
+            .get("messages")
+            .and_then(Value::as_array)
+            .expect("messages");
+
+        assert_eq!(messages[1]["role"], json!("user"));
+        assert_eq!(
+            messages[1]["content"],
+            json!("<skills_instructions>\n- imagegen\n</skills_instructions>")
+        );
+        assert_eq!(messages[2]["role"], json!("user"));
+        assert_eq!(messages[2]["content"], json!("$imagegen what is this"));
     }
 }

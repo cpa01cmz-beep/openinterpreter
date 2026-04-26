@@ -136,12 +136,13 @@ mod tests {
     use super::*;
     use codex_login::AuthCredentialsStoreMode;
     use codex_login::CodexAuth;
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_model_provider_info::WireApi;
     use pretty_assertions::assert_eq;
     use tempfile::tempdir;
     use wiremock::Mock;
     use wiremock::MockServer;
     use wiremock::ResponseTemplate;
-    use wiremock::matchers::header_regex;
     use wiremock::matchers::method;
     use wiremock::matchers::path;
 
@@ -154,54 +155,52 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn supported_models_for_provider_uses_requested_provider() {
-        let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/models"))
-            .and(header_regex("Authorization", "Bearer Test API Key"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "object": "list",
-                "data": [
-                    {
-                        "id": "llama-3.3-70b-versatile",
-                        "object": "model",
-                        "context_window": 128000
-                    }
-                ]
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-
+    async fn supported_models_for_provider_uses_provider_specific_bundled_catalog() {
         let temp_dir = tempdir().expect("tempdir");
         let mut config = codex_core::config::ConfigBuilder::default()
             .codex_home(temp_dir.path().to_path_buf())
             .build()
             .await
             .expect("config");
-        let mut provider = config.model_provider.clone();
-        provider.name = "Groq".to_string();
-        provider.base_url = Some(server.uri());
-        provider.env_key = None;
-        provider.experimental_bearer_token = Some("Test API Key".to_string());
-        provider.requires_openai_auth = false;
-        provider.supports_websockets = false;
-        config.model_providers.insert("groq".to_string(), provider);
+        config.model_providers.insert(
+            "anthropic".to_string(),
+            ModelProviderInfo {
+                name: "Anthropic".to_string(),
+                base_url: Some("https://api.anthropic.com".to_string()),
+                env_key: Some("ANTHROPIC_API_KEY".to_string()),
+                env_key_instructions: None,
+                experimental_bearer_token: None,
+                auth: None,
+                aws: None,
+                wire_api: WireApi::Messages,
+                query_params: None,
+                http_headers: None,
+                env_http_headers: None,
+                request_max_retries: None,
+                stream_max_retries: None,
+                stream_idle_timeout_ms: None,
+                websocket_connect_timeout_ms: None,
+                requires_openai_auth: false,
+                supports_websockets: false,
+            },
+        );
 
         let models = supported_models_for_provider(
             &config,
             AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key")),
-            "groq",
+            "anthropic",
             /*include_hidden*/ false,
         )
         .await
         .expect("provider models");
 
         assert!(
-            models
-                .iter()
-                .any(|model| model.model == "llama-3.3-70b-versatile"),
-            "expected provider-specific model to be present in merged catalog"
+            models.iter().any(|model| model.model == "claude-opus-4-7"),
+            "expected Anthropic bundled catalog to expose Claude models"
+        );
+        assert!(
+            !models.iter().any(|model| model.model.starts_with("gpt-")),
+            "expected Anthropic model picker to exclude OpenAI bundled models"
         );
     }
 
@@ -265,18 +264,22 @@ mod tests {
             temp_dir.path().to_path_buf(),
             /*enable_codex_api_key_env*/ false,
             AuthCredentialsStoreMode::File,
+            None,
         ));
-        let direct_models = codex_models_manager::manager::ModelsManager::with_provider_for_tests(
-            temp_dir.path().to_path_buf(),
-            Arc::clone(&auth_manager),
-            config
-                .model_providers
-                .get("openrouter")
-                .cloned()
-                .expect("openrouter provider"),
-        )
-        .list_models(codex_models_manager::manager::RefreshStrategy::OnlineIfUncached)
-        .await;
+        let openrouter_provider = config
+            .model_providers
+            .get("openrouter")
+            .cloned()
+            .expect("openrouter provider");
+        let direct_models =
+            create_model_provider(openrouter_provider, Some(Arc::clone(&auth_manager)))
+                .models_manager(
+                    temp_dir.path().to_path_buf(),
+                    None,
+                    CollaborationModesConfig::default(),
+                )
+                .list_models(codex_models_manager::manager::RefreshStrategy::OnlineIfUncached)
+                .await;
         assert!(
             direct_models
                 .iter()

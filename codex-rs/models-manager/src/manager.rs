@@ -180,6 +180,7 @@ pub type SharedModelsManager = Arc<dyn ModelsManager>;
 #[derive(Debug)]
 pub struct OpenAiModelsManager {
     remote_models: RwLock<Vec<ModelInfo>>,
+    base_models: Vec<ModelInfo>,
     collaboration_modes_config: CollaborationModesConfig,
     etag: RwLock<Option<String>>,
     cache_manager: ModelsCacheManager,
@@ -202,12 +203,19 @@ impl OpenAiModelsManager {
         endpoint_client: Arc<dyn ModelsEndpointClient>,
         auth_manager: Option<Arc<AuthManager>>,
         collaboration_modes_config: CollaborationModesConfig,
+        base_models: Vec<ModelInfo>,
     ) -> Self {
         let cache_path = codex_home.join(MODEL_CACHE_FILE);
         let cache_manager = ModelsCacheManager::new(cache_path, DEFAULT_MODEL_CACHE_TTL);
-        let remote_models = load_remote_models_from_file().unwrap_or_default();
+        let base_models = if base_models.is_empty() {
+            load_remote_models_from_file().unwrap_or_default()
+        } else {
+            base_models
+        };
+        let remote_models = base_models.clone();
         Self {
             remote_models: RwLock::new(remote_models),
+            base_models,
             collaboration_modes_config,
             etag: RwLock::new(None),
             cache_manager,
@@ -329,7 +337,7 @@ impl OpenAiModelsManager {
 
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
-        let mut existing_models = load_remote_models_from_file().unwrap_or_default();
+        let mut existing_models = self.base_models.clone();
         for model in models {
             if let Some(existing_index) = existing_models
                 .iter()

@@ -2990,7 +2990,7 @@ pub(super) fn maybe_open_auth_url_in_browser(request_handle: &AppServerRequestHa
         return;
     }
 
-    #[cfg(not(feature = "embedded-app-server"))]
+    #[cfg(all(feature = "system-browser", not(feature = "embedded-app-server")))]
     {
         let _ = request_handle;
         let _ = url;

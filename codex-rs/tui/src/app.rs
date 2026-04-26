@@ -888,7 +888,7 @@ impl App {
             .maybe_prompt_windows_sandbox_enable(should_prompt_windows_sandbox_nux_at_startup);
 
         let file_search = FileSearchManager::new(config.cwd.to_path_buf(), app_event_tx.clone());
-        #[cfg(not(debug_assertions))]
+        #[cfg(all(not(debug_assertions), feature = "startup-network"))]
         let upgrade_version = crate::updates::get_upgrade_version(&config);
 
         let mut app = Self {
@@ -978,7 +978,7 @@ impl App {
         let mut listen_for_app_server_events = true;
         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
 
-        #[cfg(not(debug_assertions))]
+        #[cfg(all(not(debug_assertions), feature = "startup-network"))]
         let pre_loop_exit_reason = if let Some(latest_version) = upgrade_version {
             let control = app
                 .handle_event(
@@ -997,7 +997,7 @@ impl App {
         } else {
             None
         };
-        #[cfg(debug_assertions)]
+        #[cfg(any(debug_assertions, not(feature = "startup-network")))]
         let pre_loop_exit_reason: Option<ExitReason> = None;
 
         let exit_reason_result = if let Some(exit_reason) = pre_loop_exit_reason {

@@ -10,7 +10,7 @@ use crate::error_code::INVALID_REQUEST_ERROR_CODE;
 use crate::fuzzy_file_search::FuzzyFileSearchSession;
 use crate::fuzzy_file_search::run_fuzzy_file_search;
 use crate::fuzzy_file_search::start_fuzzy_file_search_session;
-use crate::models::supported_models;
+use crate::models::supported_models_for_provider;
 use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
@@ -1130,10 +1130,28 @@ impl CodexMessageProcessor {
             ClientRequest::ModelList { request_id, params } => {
                 let outgoing = self.outgoing.clone();
                 let thread_manager = self.thread_manager.clone();
+                let auth_manager = self.auth_manager.clone();
+                let config = match self.load_latest_config(/*fallback_cwd*/ None).await {
+                    Ok(config) => Arc::new(config),
+                    Err(error) => {
+                        self.outgoing
+                            .send_error(to_connection_request_id(request_id), error)
+                            .await;
+                        return;
+                    }
+                };
                 let request_id = to_connection_request_id(request_id);
 
                 tokio::spawn(async move {
-                    Self::list_models(outgoing, thread_manager, request_id, params).await;
+                    Self::list_models(
+                        outgoing,
+                        thread_manager,
+                        auth_manager,
+                        config,
+                        request_id,
+                        params,
+                    )
+                    .await;
                 });
             }
             ClientRequest::ExperimentalFeatureList { request_id, params } => {
@@ -5635,6 +5653,8 @@ impl CodexMessageProcessor {
     async fn list_models(
         outgoing: Arc<OutgoingMessageSender>,
         thread_manager: Arc<ThreadManager>,
+        auth_manager: Arc<AuthManager>,
+        config: Arc<Config>,
         request_id: ConnectionRequestId,
         params: ModelListParams,
     ) {
@@ -5642,15 +5662,38 @@ impl CodexMessageProcessor {
             limit,
             cursor,
             include_hidden,
-            model_provider: _,
+            model_provider,
         } = params;
-        let models = thread_manager
-            .list_models(codex_models_manager::manager::RefreshStrategy::OnlineIfUncached)
+        let include_hidden = include_hidden.unwrap_or(false);
+        let models = if let Some(provider_id) = model_provider {
+            match supported_models_for_provider(
+                &config,
+                auth_manager,
+                provider_id.as_str(),
+                include_hidden,
+            )
             .await
-            .into_iter()
-            .filter(|preset| include_hidden.unwrap_or(false) || preset.show_in_picker)
-            .map(crate::models::model_from_preset)
-            .collect::<Vec<_>>();
+            {
+                Ok(models) => models,
+                Err(message) => {
+                    let error = JSONRPCErrorError {
+                        code: INVALID_PARAMS_ERROR_CODE,
+                        message,
+                        data: None,
+                    };
+                    outgoing.send_error(request_id, error).await;
+                    return;
+                }
+            }
+        } else {
+            thread_manager
+                .list_models(codex_models_manager::manager::RefreshStrategy::OnlineIfUncached)
+                .await
+                .into_iter()
+                .filter(|preset| include_hidden || preset.show_in_picker)
+                .map(crate::models::model_from_preset)
+                .collect::<Vec<_>>()
+        };
         let total = models.len();
 
         if total == 0 {

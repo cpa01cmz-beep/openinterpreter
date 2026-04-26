@@ -229,6 +229,7 @@ pub(crate) struct ThreadManagerState {
     thread_created_tx: broadcast::Sender<ThreadId>,
     auth_manager: Arc<AuthManager>,
     models_manager: SharedModelsManager,
+    collaboration_modes_config: CollaborationModesConfig,
     environment_manager: Arc<EnvironmentManager>,
     skills_manager: Arc<SkillsManager>,
     plugins_manager: Arc<PluginsManager>,
@@ -247,10 +248,28 @@ pub fn build_models_manager(
 ) -> SharedModelsManager {
     let provider = create_model_provider(config.model_provider.clone(), Some(auth_manager));
     provider.models_manager(
-        config.codex_home.to_path_buf(),
+        provider_cache_home(config),
         config.model_catalog.clone(),
         collaboration_modes_config,
     )
+}
+
+fn provider_cache_home(config: &Config) -> PathBuf {
+    config
+        .codex_home
+        .join("models-cache")
+        .join(sanitize_provider_id(config.model_provider_id.as_str()))
+        .to_path_buf()
+}
+
+fn sanitize_provider_id(provider_id: &str) -> String {
+    provider_id
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => ch,
+            _ => '_',
+        })
+        .collect()
 }
 
 fn configured_thread_store(config: &Config) -> Arc<dyn ThreadStore> {
@@ -296,6 +315,7 @@ impl ThreadManager {
                     auth_manager.clone(),
                     collaboration_modes_config,
                 ),
+                collaboration_modes_config,
                 environment_manager,
                 skills_manager,
                 plugins_manager,
@@ -371,6 +391,7 @@ impl ThreadManager {
                         /*config_model_catalog*/ None,
                         CollaborationModesConfig::default(),
                     ),
+                collaboration_modes_config: CollaborationModesConfig::default(),
                 environment_manager,
                 skills_manager,
                 plugins_manager,
@@ -1063,12 +1084,17 @@ impl ThreadManagerState {
         let parent_rollout_thread_trace = self
             .parent_rollout_thread_trace_for_source(&session_source, &initial_history)
             .await;
+        let models_manager = build_models_manager(
+            &config,
+            Arc::clone(&auth_manager),
+            self.collaboration_modes_config,
+        );
         let CodexSpawnOk {
             codex, thread_id, ..
         } = Codex::spawn(CodexSpawnArgs {
             config,
             auth_manager,
-            models_manager: Arc::clone(&self.models_manager),
+            models_manager,
             environment_manager: Arc::clone(&self.environment_manager),
             skills_manager: Arc::clone(&self.skills_manager),
             plugins_manager: Arc::clone(&self.plugins_manager),

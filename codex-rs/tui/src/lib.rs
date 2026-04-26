@@ -234,7 +234,9 @@ mod turn_sleep_inhibitor;
 mod ui_consts;
 pub(crate) mod update_action;
 pub use update_action::UpdateAction;
+#[cfg(all(not(debug_assertions), feature = "startup-network"))]
 mod update_prompt;
+#[cfg(all(not(debug_assertions), feature = "startup-network"))]
 mod updates;
 mod version;
 #[cfg(all(not(target_os = "linux"), feature = "realtime-audio"))]
@@ -1171,7 +1173,7 @@ async fn run_ratatui_app(
     let mut tui = Tui::new(terminal);
     let mut terminal_restore_guard = TerminalRestoreGuard::new();
 
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(not(debug_assertions), feature = "startup-network"))]
     {
         use crate::update_prompt::UpdatePromptOutcome;
 

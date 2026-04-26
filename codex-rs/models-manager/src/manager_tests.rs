@@ -195,6 +195,7 @@ fn openai_manager_for_tests_with_auth(
         endpoint_client,
         auth_manager,
         CollaborationModesConfig::default(),
+        Vec::new(),
     )
 }
 

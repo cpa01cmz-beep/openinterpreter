@@ -8,8 +8,11 @@ use codex_protocol::protocol::RealtimeConversationRealtimeEvent;
 use codex_protocol::protocol::RealtimeConversationStartedEvent;
 use codex_protocol::protocol::RealtimeEvent;
 use codex_protocol::protocol::RealtimeOutputModality;
+#[cfg(feature = "realtime-audio")]
 use codex_realtime_webrtc::RealtimeWebrtcEvent;
+#[cfg(feature = "realtime-audio")]
 use codex_realtime_webrtc::RealtimeWebrtcSession;
+#[cfg(feature = "realtime-audio")]
 use codex_realtime_webrtc::RealtimeWebrtcSessionHandle;
 #[cfg(not(target_os = "linux"))]
 use std::sync::atomic::AtomicU16;
@@ -45,6 +48,7 @@ pub(super) struct RealtimeConversationUiState {
 enum RealtimeConversationUiTransport {
     #[default]
     Websocket,
+    #[cfg(feature = "realtime-audio")]
     Webrtc {
         handle: Option<RealtimeWebrtcSessionHandle>,
     },
@@ -222,9 +226,19 @@ impl ChatWidget {
                 self.submit_realtime_conversation_start(/*transport*/ None);
             }
             RealtimeTransport::WebRtc => {
-                self.realtime_conversation.transport =
-                    RealtimeConversationUiTransport::Webrtc { handle: None };
-                start_realtime_webrtc_offer_task(self.app_event_tx.clone());
+                #[cfg(feature = "realtime-audio")]
+                {
+                    self.realtime_conversation.transport =
+                        RealtimeConversationUiTransport::Webrtc { handle: None };
+                    start_realtime_webrtc_offer_task(self.app_event_tx.clone());
+                }
+                #[cfg(not(feature = "realtime-audio"))]
+                {
+                    self.fail_realtime_conversation(
+                        "Realtime WebRTC is unavailable in this build".to_string(),
+                    );
+                    return;
+                }
             }
         }
         self.request_redraw();
@@ -369,18 +383,30 @@ impl ChatWidget {
     }
 
     pub(super) fn on_realtime_conversation_sdp(&mut self, sdp: String) {
-        let RealtimeConversationUiTransport::Webrtc {
-            handle: Some(handle),
-        } = &self.realtime_conversation.transport
-        else {
+        #[cfg(not(feature = "realtime-audio"))]
+        {
+            let _ = sdp;
             return;
-        };
+        }
 
-        if let Err(err) = handle.apply_answer_sdp(sdp) {
-            self.fail_realtime_conversation(format!("Failed to connect realtime WebRTC: {err}"));
+        #[cfg(feature = "realtime-audio")]
+        {
+            let RealtimeConversationUiTransport::Webrtc {
+                handle: Some(handle),
+            } = &self.realtime_conversation.transport
+            else {
+                return;
+            };
+
+            if let Err(err) = handle.apply_answer_sdp(sdp) {
+                self.fail_realtime_conversation(format!(
+                    "Failed to connect realtime WebRTC: {err}"
+                ));
+            }
         }
     }
 
+    #[cfg(feature = "realtime-audio")]
     pub(crate) fn on_realtime_webrtc_offer_created(
         &mut self,
         result: Result<crate::app_event::RealtimeWebrtcOffer, String>,
@@ -411,6 +437,7 @@ impl ChatWidget {
         self.request_redraw();
     }
 
+    #[cfg(feature = "realtime-audio")]
     pub(crate) fn on_realtime_webrtc_event(&mut self, event: RealtimeWebrtcEvent) {
         if !self.realtime_conversation_uses_webrtc() {
             return;
@@ -436,6 +463,7 @@ impl ChatWidget {
         }
     }
 
+    #[cfg(feature = "realtime-audio")]
     pub(crate) fn on_realtime_webrtc_local_audio_level(&mut self, peak: u16) {
         if !self.realtime_conversation_uses_webrtc() || peak == 0 {
             return;
@@ -461,6 +489,7 @@ impl ChatWidget {
         }
     }
 
+    #[cfg(feature = "realtime-audio")]
     fn realtime_conversation_uses_webrtc(&self) -> bool {
         matches!(
             self.realtime_conversation.transport,
@@ -468,12 +497,20 @@ impl ChatWidget {
         )
     }
 
+    #[cfg(not(feature = "realtime-audio"))]
+    fn realtime_conversation_uses_webrtc(&self) -> bool {
+        false
+    }
+
     fn close_realtime_webrtc_transport(&mut self) {
-        if let RealtimeConversationUiTransport::Webrtc { handle } =
-            &mut self.realtime_conversation.transport
-            && let Some(handle) = handle.take()
+        #[cfg(feature = "realtime-audio")]
         {
-            handle.close();
+            if let RealtimeConversationUiTransport::Webrtc { handle } =
+                &mut self.realtime_conversation.transport
+                && let Some(handle) = handle.take()
+            {
+                handle.close();
+            }
         }
     }
 
@@ -622,6 +659,7 @@ impl ChatWidget {
     }
 }
 
+#[cfg(feature = "realtime-audio")]
 fn start_realtime_webrtc_offer_task(app_event_tx: AppEventSender) {
     std::thread::spawn(move || {
         let result = match RealtimeWebrtcSession::start() {

@@ -2,19 +2,30 @@ use anyhow::Context;
 use clap::Parser;
 use codex_arg0::Arg0DispatchPaths;
 use codex_arg0::arg0_dispatch_or_else_current_thread;
-use codex_server_cli::cli_common::AltScreenCli;
-use codex_server_cli::cli_common::FeatureToggles;
-use codex_server_cli::cli_common::LaunchOptions;
-use codex_server_cli::cli_common::apply_interpreter_alt_screen_default;
-use codex_server_cli::cli_common::apply_interpreter_feature_defaults;
-use codex_server_cli::cli_common::daemon_startup_overrides;
-use codex_server_cli::daemon;
-use codex_server_cli::home::ensure_interpreter_home_env;
-use codex_server_cli::startup_preview::StartupModelPreview;
-use codex_server_cli::startup_trace::record_startup_trace_event;
 use codex_tui::AppExitInfo;
 use codex_tui::ExitReason;
 use codex_utils_cli::CliConfigOverrides;
+
+#[path = "../../server-cli/src/cli_common.rs"]
+mod cli_common;
+#[path = "../../server-cli/src/home.rs"]
+mod home;
+#[path = "../../server-cli/src/startup_preview.rs"]
+mod startup_preview;
+#[path = "../../server-cli/src/startup_trace.rs"]
+mod startup_trace;
+#[path = "../../server-cli/src/system_import.rs"]
+mod system_import;
+
+use cli_common::AltScreenCli;
+use cli_common::FeatureToggles;
+use cli_common::LaunchOptions;
+use cli_common::apply_interpreter_alt_screen_default;
+use cli_common::apply_interpreter_feature_defaults;
+use cli_common::daemon_startup_overrides;
+use home::ensure_interpreter_home_env;
+use startup_preview::StartupModelPreview;
+use startup_trace::record_startup_trace_event;
 
 #[derive(Parser, Debug)]
 struct RootTuiCli {
@@ -107,9 +118,14 @@ async fn run_root_tui(
                 let app_server_bin = launch.app_server_bin.clone();
                 let daemon_cli_overrides = daemon_cli_overrides.clone();
                 async move {
-                    daemon::ensure_local_app_server_url(app_server_bin, daemon_cli_overrides)
-                        .await
-                        .map_err(|err| std::io::Error::other(err.to_string()))
+                    let codex_home = home::current_interpreter_home()?;
+                    codex_app_server_launcher::ensure_local_app_server_url(
+                        &codex_home,
+                        app_server_bin,
+                        daemon_cli_overrides,
+                    )
+                    .await
+                    .map_err(|err| std::io::Error::other(err.to_string()))
                 }
             },
         )

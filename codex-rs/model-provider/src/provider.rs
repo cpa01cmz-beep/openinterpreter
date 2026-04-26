@@ -11,6 +11,7 @@ use codex_models_manager::collaboration_mode_presets::CollaborationModesConfig;
 use codex_models_manager::manager::OpenAiModelsManager;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_models_manager::manager::StaticModelsManager;
+use codex_models_manager::provider_catalog_models::bundled_provider_model_infos;
 use codex_protocol::account::ProviderAccount;
 use codex_protocol::openai_models::ModelsResponse;
 
@@ -198,6 +199,7 @@ impl ModelProvider for ConfiguredModelProvider {
                     endpoint,
                     self.auth_manager.clone(),
                     collaboration_modes_config,
+                    bundled_provider_model_infos(&self.info),
                 ))
             }
         }

@@ -84,6 +84,7 @@ mod tests {
             env_key_instructions: Some("Set ANTHROPIC_API_KEY in your environment.".to_string()),
             experimental_bearer_token: None,
             auth: None,
+            aws: None,
             wire_api: WireApi::Responses,
             query_params: None,
             http_headers: None,

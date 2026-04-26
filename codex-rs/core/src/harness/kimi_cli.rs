@@ -174,6 +174,16 @@ fn build_messages(
                         }));
                     }
                 }
+                "developer" => {
+                    flush_pending_tool_calls(&mut messages, &mut pending_tool_calls);
+                    let parts = convert_message_parts(content);
+                    if !parts.is_empty() {
+                        messages.push(json!({
+                            "role": "user",
+                            "content": Value::Array(parts),
+                        }));
+                    }
+                }
                 _ => {}
             },
             ResponseItem::FunctionCall {
@@ -720,6 +730,58 @@ mod tests {
                     }
                 ],
             })]
+        );
+    }
+
+    #[test]
+    fn kimi_developer_messages_are_preserved_as_user_messages() {
+        let items = vec![
+            ResponseItem::Message {
+                id: Some("developer".to_string()),
+                role: "developer".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "<skills_instructions>\n- imagegen\n</skills_instructions>".to_string(),
+                }],
+                end_turn: None,
+                phase: None,
+            },
+            ResponseItem::Message {
+                id: Some("user".to_string()),
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "$imagegen what is this".to_string(),
+                }],
+                end_turn: None,
+                phase: None,
+            },
+        ];
+
+        let messages = build_messages(&items, /*yolo_mode*/ false)
+            .expect("build messages")
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            messages,
+            vec![
+                json!({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "<skills_instructions>\n- imagegen\n</skills_instructions>",
+                        }
+                    ],
+                }),
+                json!({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "$imagegen what is this",
+                        }
+                    ],
+                }),
+            ]
         );
     }
 

@@ -68,6 +68,7 @@ where
         args.listen,
         args.session_source,
         auth,
+        args.shutdown_idle_timeout_seconds.map(Duration::from_secs),
     )
     .await?;
     Ok(())

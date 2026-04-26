@@ -8,7 +8,7 @@ use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ReasoningControl;
 use codex_protocol::openai_models::ReasoningEffort;
 
-pub(crate) fn bundled_provider_model_infos(provider: &ModelProviderInfo) -> Vec<ModelInfo> {
+pub fn bundled_provider_model_infos(provider: &ModelProviderInfo) -> Vec<ModelInfo> {
     let entry = if provider.is_anthropic_provider() {
         bundled_provider_catalog_entry("anthropic")
     } else {
@@ -77,6 +77,7 @@ mod tests {
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: None,
+            aws: None,
             wire_api: WireApi::Chat,
             query_params: None,
             http_headers: None,
@@ -120,6 +121,7 @@ mod tests {
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: None,
+            aws: None,
             wire_api: WireApi::Messages,
             query_params: None,
             http_headers: None,
@@ -166,6 +168,7 @@ mod tests {
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: None,
+            aws: None,
             wire_api: WireApi::Messages,
             query_params: None,
             http_headers: None,
@@ -194,6 +197,7 @@ mod tests {
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: None,
+            aws: None,
             wire_api: WireApi::Chat,
             query_params: None,
             http_headers: None,

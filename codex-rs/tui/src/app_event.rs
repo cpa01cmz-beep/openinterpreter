@@ -46,7 +46,9 @@ use codex_protocol::config_types::ServiceTier;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
+#[cfg(feature = "realtime-audio")]
 use codex_realtime_webrtc::RealtimeWebrtcEvent;
+#[cfg(feature = "realtime-audio")]
 use codex_realtime_webrtc::RealtimeWebrtcSessionHandle;
 
 use crate::history_cell::HistoryCell;
@@ -512,14 +514,17 @@ pub(crate) enum AppEvent {
     },
 
     /// Result of creating a TUI-owned realtime WebRTC offer.
+    #[cfg(feature = "realtime-audio")]
     RealtimeWebrtcOfferCreated {
         result: Result<RealtimeWebrtcOffer, String>,
     },
 
     /// Peer-connection lifecycle event from a TUI-owned realtime WebRTC session.
+    #[cfg(feature = "realtime-audio")]
     RealtimeWebrtcEvent(RealtimeWebrtcEvent),
 
     /// Local microphone level from a TUI-owned realtime WebRTC session.
+    #[cfg(feature = "realtime-audio")]
     RealtimeWebrtcLocalAudioLevel(u16),
 
     /// Open the reasoning selection popup after picking a model.
@@ -778,6 +783,7 @@ pub(crate) enum AppEvent {
 }
 
 #[derive(Debug)]
+#[cfg(feature = "realtime-audio")]
 pub(crate) struct RealtimeWebrtcOffer {
     pub(crate) offer_sdp: String,
     pub(crate) handle: RealtimeWebrtcSessionHandle,

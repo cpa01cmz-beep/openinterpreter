@@ -6,6 +6,7 @@ use crate::session::tests::make_session_and_context;
 use crate::tasks::InterruptedTurnHistoryMarker;
 use crate::tasks::interrupted_turn_history_marker;
 use codex_features::Feature;
+use codex_model_provider_info::built_in_model_providers;
 use codex_models_manager::collaboration_mode_presets::CollaborationModesConfig;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::models::ContentItem;
@@ -296,6 +297,53 @@ async fn shutdown_all_threads_bounded_submits_shutdown_to_every_thread() {
     assert!(report.submit_failed.is_empty());
     assert!(report.timed_out.is_empty());
     assert!(manager.list_thread_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn start_thread_uses_models_manager_for_thread_provider_config() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut initial_config = test_config().await;
+    initial_config.codex_home = temp_dir.path().join("codex-home").abs();
+    initial_config.cwd = initial_config.codex_home.abs();
+    std::fs::create_dir_all(&initial_config.codex_home).expect("create codex home");
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        initial_config.model_provider.clone(),
+        initial_config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let anthropic_provider = providers
+        .get("anthropic")
+        .expect("built-in Anthropic provider")
+        .clone();
+    let mut thread_config = initial_config;
+    thread_config.model_provider_id = "anthropic".to_string();
+    thread_config.model_provider = anthropic_provider.clone();
+    thread_config
+        .model_providers
+        .insert("anthropic".to_string(), anthropic_provider);
+    thread_config.model = Some("claude-opus-4-7".to_string());
+
+    let thread = manager
+        .start_thread(thread_config)
+        .await
+        .expect("start Anthropic thread")
+        .thread;
+    let turn_context = thread.codex.session.new_default_turn().await;
+
+    assert_eq!(turn_context.model_info.slug, "claude-opus-4-7");
+    assert!(
+        !turn_context.model_info.used_fallback_model_metadata,
+        "thread-specific provider catalog should be used for model metadata"
+    );
+
+    thread
+        .shutdown_and_wait()
+        .await
+        .expect("shutdown test thread");
 }
 
 #[tokio::test]
