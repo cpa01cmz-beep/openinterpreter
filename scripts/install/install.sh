@@ -200,6 +200,10 @@ latest_release_metadata_url() {
   printf 'https://api.github.com/repos/%s/releases/latest\n' "$GITHUB_REPO"
 }
 
+all_releases_metadata_url() {
+  printf 'https://api.github.com/repos/%s/releases\n' "$GITHUB_REPO"
+}
+
 release_asset_digest() {
   asset="$1"
   resolved_version="$2"
@@ -305,7 +309,10 @@ resolve_version() {
     return
   fi
 
-  release_json="$(download_text "$(latest_release_metadata_url)")"
+  release_json="$(download_text "$(latest_release_metadata_url)" 2>/dev/null || true)"
+  if [ -z "$release_json" ]; then
+    release_json="$(download_text "$(all_releases_metadata_url)")"
+  fi
   resolved="$(printf '%s\n' "$release_json" | sed -n 's/.*"tag_name":[[:space:]]*"v\([^"]*\)".*/\1/p' | head -n 1)"
 
   if [ -z "$resolved" ]; then
