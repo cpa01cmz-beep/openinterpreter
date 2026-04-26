@@ -44,6 +44,8 @@ use uuid::Uuid;
 
 use crate::LoginStatus;
 use crate::config_write_edits::provider_model_selection_edits;
+#[cfg(test)]
+use crate::feedback_support::CodexFeedback;
 use crate::onboarding::local_provider::start_hint as local_provider_start_hint;
 use crate::onboarding::local_provider::start_local_provider;
 use crate::onboarding::local_provider::wait_for_local_provider_running;
@@ -76,8 +78,6 @@ use crate::style::app_accent_underlined_style;
 use crate::style::selected_option_style;
 use crate::style::unselected_option_style;
 use crate::tui::FrameRequester;
-#[cfg(test)]
-use codex_feedback::CodexFeedback;
 #[cfg(feature = "direct-login")]
 use codex_login::kimi_code;
 use codex_model_provider_info::ModelProviderInfo;
