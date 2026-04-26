@@ -13,6 +13,16 @@ pub struct BearerAuthProvider {
 }
 
 impl BearerAuthProvider {
+    pub fn new(token: String) -> Self {
+        Self {
+            token: Some(token),
+            account_id: None,
+            is_fedramp_account: false,
+            token_header_name: None,
+            use_bearer_prefix: true,
+        }
+    }
+
     pub fn for_test(token: Option<&str>, account_id: Option<&str>) -> Self {
         Self {
             token: token.map(str::to_string),

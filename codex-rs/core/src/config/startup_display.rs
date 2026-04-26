@@ -17,6 +17,7 @@ use super::resolve_sqlite_home_env;
 use super::resolve_tool_suggest_config;
 use super::resolve_web_search_config;
 use super::resolve_web_search_mode;
+use super::thread_store_config;
 use crate::agents_md::DEFAULT_AGENTS_MD_FILENAME as DEFAULT_PROJECT_DOC_FILENAME;
 use crate::agents_md::LOCAL_AGENTS_MD_FILENAME as LOCAL_PROJECT_DOC_FILENAME;
 use crate::config_loader::build_cli_overrides_layer;
@@ -87,8 +88,6 @@ pub(super) fn build_startup_display_config(
         codex_self_exe,
         codex_linux_sandbox_exe,
         main_execve_wrapper_exe,
-        js_repl_node_path,
-        js_repl_node_module_dirs,
         zsh_path,
         base_instructions,
         developer_instructions,
@@ -99,6 +98,7 @@ pub(super) fn build_startup_display_config(
         tools_web_search_request: override_tools_web_search_request,
         ephemeral,
         additional_writable_roots: _,
+        permission_profile: _,
     } = overrides;
 
     let active_profile_name = config_profile.as_ref().or(cfg.profile.as_ref()).cloned();
@@ -235,7 +235,6 @@ pub(super) fn build_startup_display_config(
             sandbox_policy: Constrained::allow_any(sandbox_policy.clone()),
             file_system_sandbox_policy: FileSystemSandboxPolicy::from_legacy_sandbox_policy(
                 &sandbox_policy,
-                resolved_cwd.as_path(),
             ),
             network_sandbox_policy: NetworkSandboxPolicy::from(&sandbox_policy),
             network: None,
@@ -270,6 +269,11 @@ pub(super) fn build_startup_display_config(
             .include_apps_instructions
             .or(cfg.include_apps_instructions)
             .unwrap_or(false),
+        include_skill_instructions: cfg
+            .skills
+            .as_ref()
+            .and_then(|skills| skills.include_instructions)
+            .unwrap_or(true),
         include_environment_context: config_profile
             .include_environment_context
             .or(cfg.include_environment_context)
@@ -307,6 +311,11 @@ pub(super) fn build_startup_display_config(
             .agents
             .as_ref()
             .and_then(|agents| agents.job_max_runtime_seconds),
+        agent_interrupt_message_enabled: cfg
+            .agents
+            .as_ref()
+            .and_then(|agents| agents.interrupt_message)
+            .unwrap_or(true),
         agent_max_depth: cfg
             .agents
             .as_ref()
@@ -323,16 +332,6 @@ pub(super) fn build_startup_display_config(
         codex_self_exe,
         codex_linux_sandbox_exe,
         main_execve_wrapper_exe,
-        js_repl_node_path: js_repl_node_path
-            .or_else(|| cfg.js_repl_node_path.clone().map(PathBuf::from)),
-        js_repl_node_module_dirs: js_repl_node_module_dirs.unwrap_or_else(|| {
-            cfg.js_repl_node_module_dirs
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(PathBuf::from)
-                .collect()
-        }),
         zsh_path: zsh_path.or_else(|| cfg.zsh_path.clone().map(PathBuf::from)),
         model_reasoning_effort: config_profile
             .model_reasoning_effort
@@ -381,6 +380,11 @@ pub(super) fn build_startup_display_config(
         experimental_realtime_start_instructions: cfg
             .experimental_realtime_start_instructions
             .clone(),
+        experimental_thread_config_endpoint: cfg.experimental_thread_config_endpoint.clone(),
+        experimental_thread_store: thread_store_config(
+            cfg.experimental_thread_store.clone(),
+            cfg.experimental_thread_store_endpoint.clone(),
+        ),
         forced_chatgpt_workspace_id: cfg.forced_chatgpt_workspace_id.clone(),
         forced_login_method: cfg.forced_login_method,
         include_apply_patch_tool: features.enabled(Feature::ApplyPatchFreeform),

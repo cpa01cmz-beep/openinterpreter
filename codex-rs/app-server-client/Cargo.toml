@@ -16,6 +16,7 @@ default = ["in-process"]
 in-process = [
     "dep:codex-app-server",
     "dep:codex-arg0",
+    "dep:codex-config",
     "dep:codex-core",
     "dep:codex-exec-server",
     "dep:codex-feedback",
@@ -27,6 +28,7 @@ in-process = [
 codex-app-server = { workspace = true, optional = true }
 codex-app-server-protocol = { workspace = true }
 codex-arg0 = { workspace = true, optional = true }
+codex-config = { workspace = true, optional = true }
 codex-core = { workspace = true, optional = true }
 codex-exec-server = { workspace = true, optional = true }
 codex-feedback = { workspace = true, optional = true }

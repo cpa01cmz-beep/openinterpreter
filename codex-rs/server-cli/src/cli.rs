@@ -223,53 +223,46 @@ fn prepend_config_flags(
 }
 
 fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli) {
-    if let Some(model) = subcommand_cli.model {
-        interactive.model = Some(model);
-    }
-    if subcommand_cli.oss {
-        interactive.oss = true;
-    }
-    if let Some(oss_provider) = subcommand_cli.oss_provider {
-        interactive.oss_provider = Some(oss_provider);
-    }
-    if let Some(profile) = subcommand_cli.config_profile {
-        interactive.config_profile = Some(profile);
-    }
-    if let Some(sandbox) = subcommand_cli.sandbox_mode {
-        interactive.sandbox_mode = Some(sandbox);
-    }
-    if let Some(approval) = subcommand_cli.approval_policy {
+    let TuiCli {
+        prompt,
+        prefill_prompt: _,
+        submit_prefill_prompt: _,
+        images: _,
+        resume_picker: _,
+        resume_last: _,
+        resume_session_id: _,
+        resume_show_all: _,
+        resume_include_non_interactive: _,
+        fork_picker: _,
+        fork_last: _,
+        fork_session_id: _,
+        fork_show_all: _,
+        shared,
+        approval_policy,
+        web_search,
+        no_alt_screen,
+        config_overrides,
+    } = subcommand_cli;
+
+    interactive.apply_subcommand_overrides(shared.into_inner());
+
+    if let Some(approval) = approval_policy {
         interactive.approval_policy = Some(approval);
     }
-    if subcommand_cli.full_auto {
-        interactive.full_auto = true;
-    }
-    if subcommand_cli.dangerously_bypass_approvals_and_sandbox {
-        interactive.dangerously_bypass_approvals_and_sandbox = true;
-    }
-    if let Some(cwd) = subcommand_cli.cwd {
-        interactive.cwd = Some(cwd);
-    }
-    if subcommand_cli.web_search {
+    if web_search {
         interactive.web_search = true;
     }
-    if !subcommand_cli.images.is_empty() {
-        interactive.images = subcommand_cli.images;
-    }
-    if !subcommand_cli.add_dir.is_empty() {
-        interactive.add_dir.extend(subcommand_cli.add_dir);
-    }
-    if subcommand_cli.no_alt_screen {
+    if no_alt_screen {
         interactive.no_alt_screen = true;
     }
-    if let Some(prompt) = subcommand_cli.prompt {
+    if let Some(prompt) = prompt {
         interactive.prompt = Some(prompt.replace("\r\n", "\n").replace('\r', "\n"));
     }
 
     interactive
         .config_overrides
         .raw_overrides
-        .extend(subcommand_cli.config_overrides.raw_overrides);
+        .extend(config_overrides.raw_overrides);
 }
 
 #[cfg(test)]

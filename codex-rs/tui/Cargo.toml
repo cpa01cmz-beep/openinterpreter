@@ -82,6 +82,8 @@ codex-chatgpt = { workspace = true }
 codex-config = { workspace = true }
 codex-connectors = { workspace = true }
 codex-core = { path = "../core", default-features = false }
+codex-core-plugins = { workspace = true }
+codex-core-skills = { workspace = true }
 codex-install-context = { workspace = true }
 codex-exec-server = { workspace = true }
 codex-features = { workspace = true }

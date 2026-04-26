@@ -3055,7 +3055,9 @@ mod tests {
             ),
             feedback: CodexFeedback::new(),
             log_db: None,
-            environment_manager: Arc::new(EnvironmentManager::new(/*exec_server_url*/ None)),
+            environment_manager: Arc::new(
+                codex_app_server_client::EnvironmentManager::default_for_tests(),
+            ),
             config_warnings: Vec::new(),
             session_source: SessionSource::Cli,
             enable_codex_api_key_env: false,

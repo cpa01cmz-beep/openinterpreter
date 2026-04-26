@@ -10,14 +10,18 @@
 
 use std::path::PathBuf;
 
+use codex_app_server_protocol::AddCreditsNudgeCreditType;
+use codex_app_server_protocol::AddCreditsNudgeEmailStatus;
 use codex_app_server_protocol::AppInfo;
 use codex_app_server_protocol::McpServerStatus;
+use codex_app_server_protocol::McpServerStatusDetail;
 use codex_app_server_protocol::PluginInstallResponse;
 use codex_app_server_protocol::PluginListResponse;
 use codex_app_server_protocol::PluginReadParams;
 use codex_app_server_protocol::PluginReadResponse;
 use codex_app_server_protocol::PluginUninstallResponse;
 use codex_app_server_protocol::SkillsListResponse;
+use codex_app_server_protocol::ThreadGoalStatus;
 use codex_file_search::FileMatch;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ModelPreset;
@@ -31,13 +35,11 @@ use crate::bottom_pane::ApprovalRequest;
 use crate::bottom_pane::StatusLineItem;
 use crate::bottom_pane::TerminalTitleItem;
 use crate::chatwidget::UserMessage;
-use crate::history_cell::HistoryCell;
-use crate::legacy_core::plugins::PluginCapabilitySummary;
 use crate::onboarding::model_selection::LoadingProviderModelsState;
 use crate::onboarding::provider_setup::ProviderPreset;
-
 use codex_config::types::ApprovalsReviewer;
 use codex_features::Feature;
+use codex_plugin::PluginCapabilitySummary;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ServiceTier;
@@ -47,10 +49,18 @@ use codex_protocol::protocol::SandboxPolicy;
 use codex_realtime_webrtc::RealtimeWebrtcEvent;
 use codex_realtime_webrtc::RealtimeWebrtcSessionHandle;
 
+use crate::history_cell::HistoryCell;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RealtimeAudioDeviceKind {
     Microphone,
     Speaker,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ThreadGoalSetMode {
+    ConfirmIfExists,
+    ReplaceExisting,
 }
 
 impl RealtimeAudioDeviceKind {
@@ -181,15 +191,113 @@ pub(crate) enum AppEvent {
         matches: Vec<FileMatch>,
     },
 
+    /// Configure a provider preset if needed, then load its advertised model list.
+    ConfigureProviderPresetAndLoadModels {
+        preset: ProviderPreset,
+    },
+
+    /// Load the model list for a provider.
+    LoadProviderModels {
+        loading_state: LoadingProviderModelsState,
+    },
+
+    /// Result of loading the model list for a provider.
+    ProviderModelsLoaded {
+        loading_state: LoadingProviderModelsState,
+        result: Result<Vec<ModelPreset>, String>,
+    },
+
+    /// Configure a custom provider, then load its advertised model list.
+    ConfigureCustomProviderAndLoadModels {
+        preset: ProviderPreset,
+        provider_name: String,
+        base_url: String,
+        api_key: String,
+        api_key_prefilled_from_env: bool,
+    },
+
+    /// Open the next prompt in the custom compatible-provider flow.
+    OpenCustomProviderBaseUrlPrompt {
+        preset: ProviderPreset,
+        provider_name: String,
+    },
+
+    /// Open the API key prompt in the provider setup flow.
+    OpenCustomProviderApiKeyPrompt {
+        preset: ProviderPreset,
+        provider_name: String,
+        base_url: String,
+    },
+
+    /// Open the manual model entry prompt for a provider.
+    OpenCustomProviderModelPrompt {
+        provider_id: String,
+        provider_name: String,
+        initial_text: Option<String>,
+    },
+
+    /// Open provider-specific reasoning/thinking selection.
+    OpenReasoningPopupForProvider {
+        provider_id: String,
+        provider_name: String,
+        model: ModelPreset,
+    },
+
+    /// Persist provider/model/harness selection and start a fresh chat.
+    PersistProviderModelSelection {
+        provider_id: String,
+        provider_name: String,
+        model: String,
+        effort: Option<ReasoningEffort>,
+    },
+
+    /// Start a local provider, wait for readiness, then load its models.
+    StartLocalProviderAndLoadModels {
+        loading_state: LoadingProviderModelsState,
+    },
+
     /// Refresh account rate limits in the background.
     RefreshRateLimits {
         origin: RateLimitRefreshOrigin,
+    },
+
+    /// Open the current thread goal summary/action menu.
+    OpenThreadGoalMenu {
+        thread_id: ThreadId,
+    },
+
+    /// Set or replace the current thread goal objective.
+    SetThreadGoalObjective {
+        thread_id: ThreadId,
+        objective: String,
+        mode: ThreadGoalSetMode,
+    },
+
+    /// Pause or unpause the current thread goal.
+    SetThreadGoalStatus {
+        thread_id: ThreadId,
+        status: ThreadGoalStatus,
+    },
+
+    /// Clear the current thread goal.
+    ClearThreadGoal {
+        thread_id: ThreadId,
     },
 
     /// Result of refreshing rate limits.
     RateLimitsLoaded {
         origin: RateLimitRefreshOrigin,
         result: Result<Vec<RateLimitSnapshot>, String>,
+    },
+
+    /// Send a user-confirmed request to notify the workspace owner.
+    SendAddCreditsNudgeEmail {
+        credit_type: AddCreditsNudgeCreditType,
+    },
+
+    /// Result of notifying the workspace owner.
+    AddCreditsNudgeEmailFinished {
+        result: Result<AddCreditsNudgeEmailStatus, String>,
     },
 
     /// Result of prefetching connectors.
@@ -324,11 +432,14 @@ pub(crate) enum AppEvent {
     PluginInstallAuthAbandon,
 
     /// Fetch MCP inventory via app-server RPCs and render it into history.
-    FetchMcpInventory,
+    FetchMcpInventory {
+        detail: McpServerStatusDetail,
+    },
 
     /// Result of fetching MCP inventory via app-server RPCs.
     McpInventoryLoaded {
         result: Result<Vec<McpServerStatus>, String>,
+        detail: McpServerStatusDetail,
     },
 
     /// Result of the startup skills refresh that runs after the first frame is scheduled.
@@ -371,71 +482,6 @@ pub(crate) enum AppEvent {
     PersistModelSelection {
         model: String,
         effort: Option<ReasoningEffort>,
-    },
-
-    /// Configure a provider preset if needed, then load its advertised model list.
-    ConfigureProviderPresetAndLoadModels {
-        preset: ProviderPreset,
-    },
-
-    /// Load the model list for a provider.
-    LoadProviderModels {
-        loading_state: LoadingProviderModelsState,
-    },
-
-    /// Result of loading the model list for a provider.
-    ProviderModelsLoaded {
-        loading_state: LoadingProviderModelsState,
-        result: Result<Vec<ModelPreset>, String>,
-    },
-
-    /// Open the next prompt in the custom compatible-provider flow.
-    OpenCustomProviderBaseUrlPrompt {
-        preset: ProviderPreset,
-        provider_name: String,
-    },
-
-    /// Open the API key prompt in the provider setup flow.
-    OpenCustomProviderApiKeyPrompt {
-        preset: ProviderPreset,
-        provider_name: String,
-        base_url: String,
-    },
-
-    /// Persist a custom compatible-provider definition, then load its models.
-    ConfigureCustomProviderAndLoadModels {
-        preset: ProviderPreset,
-        provider_name: String,
-        base_url: String,
-        api_key: String,
-        api_key_prefilled_from_env: bool,
-    },
-
-    /// Open the manual model entry prompt for a provider.
-    OpenCustomProviderModelPrompt {
-        provider_id: String,
-        provider_name: String,
-        initial_text: Option<String>,
-    },
-
-    /// Open provider-specific reasoning/thinking selection.
-    OpenReasoningPopupForProvider {
-        provider_id: String,
-        provider_name: String,
-        model: ModelPreset,
-    },
-
-    /// Persist provider/model/harness selection and start a fresh chat.
-    PersistProviderModelSelection {
-        provider_id: String,
-        provider_name: String,
-        model: String,
-        effort: Option<ReasoningEffort>,
-    },
-
-    /// Start a local provider, wait for readiness, then load its models.
-    StartLocalProviderAndLoadModels {
-        loading_state: LoadingProviderModelsState,
     },
 
     /// Persist the selected personality to the appropriate config.

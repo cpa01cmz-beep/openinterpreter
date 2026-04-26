@@ -23,16 +23,16 @@ use crate::bottom_pane::pending_thread_approvals::PendingThreadApprovals;
 use crate::bottom_pane::unified_exec_footer::UnifiedExecFooter;
 use crate::key_hint;
 use crate::key_hint::KeyBinding;
-use crate::legacy_core::plugins::PluginCapabilitySummary;
-use crate::legacy_core::skills::model::SkillMetadata;
 use crate::render::renderable::FlexRenderable;
 use crate::render::renderable::Renderable;
 use crate::render::renderable::RenderableItem;
 use crate::tui::FrameRequester;
 use bottom_pane_view::BottomPaneView;
 use bottom_pane_view::ViewCompletion;
+use codex_core_skills::model::SkillMetadata;
 use codex_features::Features;
 use codex_file_search::FileMatch;
+use codex_plugin::PluginCapabilitySummary;
 use codex_protocol::request_user_input::RequestUserInputEvent;
 use codex_protocol::user_input::TextElement;
 use crossterm::event::KeyCode;
@@ -49,6 +49,7 @@ mod mcp_server_elicitation;
 mod multi_select_picker;
 mod request_user_input;
 mod status_line_setup;
+mod status_surface_preview;
 mod title_setup;
 pub(crate) use app_link_view::AppLinkElicitationTarget;
 pub(crate) use app_link_view::AppLinkSuggestionType;
@@ -89,6 +90,9 @@ mod skill_popup;
 mod skills_toggle_view;
 pub(crate) mod slash_commands;
 pub(crate) use footer::CollaborationModeIndicator;
+pub(crate) use footer::GoalStatusIndicator;
+#[cfg(test)]
+pub(crate) use footer::goal_status_indicator_line;
 pub(crate) use list_selection_view::ColumnWidthMode;
 pub(crate) use list_selection_view::SelectionRowDisplay;
 pub(crate) use list_selection_view::SelectionToggle;
@@ -107,10 +111,13 @@ pub(crate) use feedback_view::feedback_upload_consent_params;
 pub(crate) use skills_toggle_view::SkillsToggleItem;
 pub(crate) use skills_toggle_view::SkillsToggleView;
 pub(crate) use status_line_setup::StatusLineItem;
-pub(crate) use status_line_setup::StatusLinePreviewData;
 pub(crate) use status_line_setup::StatusLineSetupView;
+pub(crate) use status_surface_preview::StatusSurfacePreviewData;
+pub(crate) use status_surface_preview::StatusSurfacePreviewItem;
 pub(crate) use title_setup::TerminalTitleItem;
 pub(crate) use title_setup::TerminalTitleSetupView;
+#[cfg(test)]
+pub(crate) use title_setup::preview_line_for_title_items;
 mod paste_burst;
 mod pending_input_preview;
 mod pending_thread_approvals;
@@ -328,6 +335,11 @@ impl BottomPane {
         self.request_redraw();
     }
 
+    pub fn set_goal_status_indicator(&mut self, indicator: Option<GoalStatusIndicator>) {
+        self.composer.set_goal_status_indicator(indicator);
+        self.request_redraw();
+    }
+
     pub fn set_personality_command_enabled(&mut self, enabled: bool) {
         self.composer.set_personality_command_enabled(enabled);
         self.request_redraw();
@@ -335,6 +347,11 @@ impl BottomPane {
 
     pub fn set_fast_command_enabled(&mut self, enabled: bool) {
         self.composer.set_fast_command_enabled(enabled);
+        self.request_redraw();
+    }
+
+    pub fn set_goal_command_enabled(&mut self, enabled: bool) {
+        self.composer.set_goal_command_enabled(enabled);
         self.request_redraw();
     }
 

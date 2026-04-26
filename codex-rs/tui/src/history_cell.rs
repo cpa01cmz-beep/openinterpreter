@@ -23,14 +23,12 @@ use crate::legacy_core::config::Config;
 use crate::legacy_core::web_search_detail;
 use crate::live_wrap::take_prefix_by_width;
 use crate::markdown::append_markdown;
-use crate::product_branding::ProductBranding;
 use crate::render::line_utils::line_to_static;
 use crate::render::line_utils::prefix_lines;
 use crate::render::line_utils::push_owned_lines;
 use crate::render::renderable::Renderable;
 use crate::style::proposed_plan_style;
 use crate::style::user_message_style;
-use crate::telemetry::RuntimeMetricsSummary;
 #[cfg(test)]
 use crate::test_support::PathBufExt;
 #[cfg(test)]
@@ -44,15 +42,14 @@ use crate::version::CODEX_CLI_VERSION;
 use crate::wrapping::RtOptions;
 use crate::wrapping::adaptive_wrap_line;
 use crate::wrapping::adaptive_wrap_lines;
-#[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
 use base64::Engine;
 use codex_app_server_protocol::McpServerStatus;
 use codex_app_server_protocol::McpServerStatusDetail;
 use codex_config::types::McpServerTransportConfig;
 #[cfg(test)]
 use codex_mcp::qualified_mcp_tool_name_prefix;
+use codex_otel::RuntimeMetricsSummary;
 use codex_protocol::account::PlanType;
-use codex_protocol::config_types::ServiceTier;
 use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
 #[cfg(test)]
 use codex_protocol::mcp::Resource;
@@ -75,9 +72,7 @@ use codex_protocol::request_user_input::RequestUserInputQuestion;
 use codex_protocol::user_input::TextElement;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_cli::format_env_display;
-#[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
 use image::DynamicImage;
-#[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
 use image::ImageReader;
 use ratatui::prelude::*;
 use ratatui::style::Color;
@@ -89,13 +84,11 @@ use ratatui::widgets::Paragraph;
 use ratatui::widgets::Wrap;
 use std::any::Any;
 use std::collections::HashMap;
-#[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
 use std::io::Cursor;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-#[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
 use tracing::error;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -823,9 +816,6 @@ pub fn new_approval_decision_cell(
     use codex_protocol::protocol::NetworkPolicyRuleAction;
     use codex_protocol::protocol::ReviewDecision::*;
 
-    let branding = ProductBranding::current();
-    let agent_name = branding.agent_name();
-    let agent_name_lowercase = branding.agent_name_lowercase();
     let (symbol, summary): (Span<'static>, Vec<Span<'static>>) = match decision {
         Approved => {
             let snippet = Span::from(exec_snippet(&command)).dim();
@@ -834,7 +824,7 @@ pub fn new_approval_decision_cell(
                 vec![
                     actor.subject().into(),
                     "approved".bold(),
-                    format!(" {agent_name_lowercase} to run ").into(),
+                    " codex to run ".into(),
                     snippet,
                     " this time".bold(),
                 ],
@@ -849,8 +839,7 @@ pub fn new_approval_decision_cell(
                 vec![
                     actor.subject().into(),
                     "approved".bold(),
-                    format!(" {agent_name_lowercase} to always run commands that start with ")
-                        .into(),
+                    " codex to always run commands that start with ".into(),
                     snippet,
                 ],
             )
@@ -862,7 +851,7 @@ pub fn new_approval_decision_cell(
                 vec![
                     actor.subject().into(),
                     "approved".bold(),
-                    format!(" {agent_name_lowercase} to run ").into(),
+                    " codex to run ".into(),
                     snippet,
                     " every time this session".bold(),
                 ],
@@ -876,7 +865,7 @@ pub fn new_approval_decision_cell(
                 vec![
                     actor.subject().into(),
                     "persisted".bold(),
-                    format!(" {agent_name} network access to ").into(),
+                    " Codex network access to ".into(),
                     Span::from(network_policy_amendment.host).dim(),
                 ],
             ),
@@ -885,7 +874,7 @@ pub fn new_approval_decision_cell(
                 vec![
                     actor.subject().into(),
                     "denied".bold(),
-                    format!(" {agent_name_lowercase} network access to ").into(),
+                    " codex network access to ".into(),
                     Span::from(network_policy_amendment.host).dim(),
                     " and saved that rule".into(),
                 ],
@@ -897,13 +886,13 @@ pub fn new_approval_decision_cell(
                 ApprovalDecisionActor::User => vec![
                     actor.subject().into(),
                     "did not approve".bold(),
-                    format!(" {agent_name_lowercase} to run ").into(),
+                    " codex to run ".into(),
                     snippet,
                 ],
                 ApprovalDecisionActor::Guardian => vec![
                     "Request ".into(),
                     "denied".bold(),
-                    format!(" for {agent_name_lowercase} to run ").into(),
+                    " for codex to run ".into(),
                     snippet,
                 ],
             };
@@ -916,7 +905,7 @@ pub fn new_approval_decision_cell(
                 vec![
                     "Review ".into(),
                     "timed out".bold(),
-                    format!(" before {agent_name_lowercase} could run ").into(),
+                    " before codex could run ".into(),
                     snippet,
                 ],
             )
@@ -958,11 +947,10 @@ impl ApprovalDecisionActor {
 }
 
 pub fn new_guardian_denied_patch_request(files: Vec<String>) -> Box<dyn HistoryCell> {
-    let agent_name_lowercase = ProductBranding::current().agent_name_lowercase();
     let mut summary = vec![
         "Request ".into(),
         "denied".bold(),
-        format!(" for {agent_name_lowercase} to apply ").into(),
+        " for codex to apply ".into(),
     ];
     if files.len() == 1 {
         summary.push("a patch touching ".into());
@@ -1001,11 +989,10 @@ pub fn new_guardian_approved_action_request(summary: String) -> Box<dyn HistoryC
 }
 
 pub fn new_guardian_timed_out_patch_request(files: Vec<String>) -> Box<dyn HistoryCell> {
-    let agent_name_lowercase = ProductBranding::current().agent_name_lowercase();
     let mut summary = vec![
         "Review ".into(),
         "timed out".bold(),
-        format!(" before {agent_name_lowercase} could apply ").into(),
+        " before codex could apply ".into(),
     ];
     if files.len() == 1 {
         summary.push("a patch touching ".into());
@@ -1054,7 +1041,6 @@ impl HistoryCell for PatchHistoryCell {
 
 #[derive(Debug)]
 struct CompletedMcpToolCallWithImageOutput {
-    #[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
     _image: DynamicImage,
 }
 impl HistoryCell for CompletedMcpToolCallWithImageOutput {
@@ -1206,7 +1192,6 @@ pub(crate) fn new_session_info(
         sandbox_policy,
         ..
     } = event;
-    let branding = ProductBranding::current();
     // Header box rendered as history (so it appears at the very top)
     let header = SessionHeaderHistoryCell::new(
         model.clone(),
@@ -1228,11 +1213,7 @@ pub(crate) fn new_session_info(
             Line::from(vec![
                 "  ".into(),
                 "/init".into(),
-                format!(
-                    " - create an AGENTS.md file with instructions for {}",
-                    branding.agent_name()
-                )
-                .dim(),
+                " - create an AGENTS.md file with instructions for Codex".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
@@ -1242,7 +1223,7 @@ pub(crate) fn new_session_info(
             Line::from(vec![
                 "  ".into(),
                 "/permissions".into(),
-                format!(" - choose what {} is allowed to do", branding.agent_name()).dim(),
+                " - choose what Codex is allowed to do".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
@@ -1260,12 +1241,7 @@ pub(crate) fn new_session_info(
     } else {
         if config.show_tooltips
             && let Some(tooltips) = tooltip_override
-                .or_else(|| {
-                    tooltips::get_tooltip(
-                        auth_plan,
-                        matches!(config.service_tier, Some(ServiceTier::Fast)),
-                    )
-                })
+                .or_else(|| tooltips::get_tooltip(auth_plan, show_fast_status))
                 .map(|tip| TooltipHistoryCell::new(tip, &config.cwd))
         {
             parts.push(Box::new(tooltips));
@@ -1405,14 +1381,13 @@ impl HistoryCell for SessionHeaderHistoryCell {
         let Some(inner_width) = card_inner_width(width, SESSION_HEADER_MAX_INNER_WIDTH) else {
             return Vec::new();
         };
-        let branding = ProductBranding::current();
 
         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
 
-        // Title line rendered inside the box: ">_ <product> (vX)"
+        // Title line rendered inside the box: ">_ OpenAI Codex (vX)"
         let title_spans: Vec<Span<'static>> = vec![
             Span::from(">_ ").dim(),
-            Span::from(branding.session_header_name()).bold(),
+            Span::from("OpenAI Codex").bold(),
             Span::from(" ").dim(),
             Span::from(format!("(v{})", self.version)).dim(),
         ];
@@ -1564,10 +1539,31 @@ impl McpToolCallCell {
     }
 
     fn render_content_block(block: &serde_json::Value, width: usize) -> String {
-        if let Some(rendered) = render_structured_content_block(block, width) {
-            rendered
-        } else {
-            format_and_truncate_tool_result(&block.to_string(), TOOL_CALL_MAX_LINES, width)
+        let content = match serde_json::from_value::<rmcp::model::Content>(block.clone()) {
+            Ok(content) => content,
+            Err(_) => {
+                return format_and_truncate_tool_result(
+                    &block.to_string(),
+                    TOOL_CALL_MAX_LINES,
+                    width,
+                );
+            }
+        };
+
+        match content.raw {
+            rmcp::model::RawContent::Text(text) => {
+                format_and_truncate_tool_result(&text.text, TOOL_CALL_MAX_LINES, width)
+            }
+            rmcp::model::RawContent::Image(_) => "<image content>".to_string(),
+            rmcp::model::RawContent::Audio(_) => "<audio content>".to_string(),
+            rmcp::model::RawContent::Resource(resource) => {
+                let uri = match resource.resource {
+                    rmcp::model::ResourceContents::TextResourceContents { uri, .. } => uri,
+                    rmcp::model::ResourceContents::BlobResourceContents { uri, .. } => uri,
+                };
+                format!("embedded resource: {uri}")
+            }
+            rmcp::model::RawContent::ResourceLink(link) => format!("link: {}", link.uri),
         }
     }
 }
@@ -1932,13 +1928,6 @@ pub(crate) fn new_web_search_call(
 fn try_new_completed_mcp_tool_call_with_image_output(
     result: &Result<codex_protocol::mcp::CallToolResult, String>,
 ) -> Option<CompletedMcpToolCallWithImageOutput> {
-    #[cfg(not(all(feature = "rich-media", feature = "structured-mcp-content")))]
-    {
-        let _ = result;
-        return None;
-    }
-
-    #[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
     let image = result
         .as_ref()
         .ok()?
@@ -1946,49 +1935,23 @@ fn try_new_completed_mcp_tool_call_with_image_output(
         .iter()
         .find_map(decode_mcp_image)?;
 
-    #[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
     Some(CompletedMcpToolCallWithImageOutput { _image: image })
-}
-
-#[cfg(feature = "structured-mcp-content")]
-fn render_structured_content_block(block: &serde_json::Value, width: usize) -> Option<String> {
-    let content = serde_json::from_value::<rmcp::model::Content>(block.clone()).ok()?;
-    Some(match content.raw {
-        rmcp::model::RawContent::Text(text) => {
-            format_and_truncate_tool_result(&text.text, TOOL_CALL_MAX_LINES, width)
-        }
-        rmcp::model::RawContent::Image(_) => "<image content>".to_string(),
-        rmcp::model::RawContent::Audio(_) => "<audio content>".to_string(),
-        rmcp::model::RawContent::Resource(resource) => {
-            let uri = match resource.resource {
-                rmcp::model::ResourceContents::TextResourceContents { uri, .. } => uri,
-                rmcp::model::ResourceContents::BlobResourceContents { uri, .. } => uri,
-            };
-            format!("embedded resource: {uri}")
-        }
-        rmcp::model::RawContent::ResourceLink(link) => format!("link: {}", link.uri),
-    })
-}
-
-#[cfg(not(feature = "structured-mcp-content"))]
-fn render_structured_content_block(_block: &serde_json::Value, _width: usize) -> Option<String> {
-    None
 }
 
 /// Decodes an MCP `ImageContent` block into an in-memory image.
 ///
 /// Returns `None` when the block is not an image, when base64 decoding fails, when the format
 /// cannot be inferred, or when the image decoder rejects the bytes.
-#[cfg(all(feature = "rich-media", feature = "structured-mcp-content"))]
 fn decode_mcp_image(block: &serde_json::Value) -> Option<DynamicImage> {
     let content = serde_json::from_value::<rmcp::model::Content>(block.clone()).ok()?;
     let rmcp::model::RawContent::Image(image) = content.raw else {
         return None;
     };
-    let base64_data = if let Some(data_url) = image.data.strip_prefix("data:") {
+    let image_data = image.data.as_str();
+    let base64_data: &str = if let Some(data_url) = image_data.strip_prefix("data:") {
         data_url.split_once(',')?.1
     } else {
-        image.data.as_str()
+        image_data
     };
     let raw_data = base64::engine::general_purpose::STANDARD
         .decode(base64_data)
@@ -2014,14 +1977,53 @@ fn decode_mcp_image(block: &serde_json::Value) -> Option<DynamicImage> {
         .ok()
 }
 
-#[cfg(not(all(feature = "rich-media", feature = "structured-mcp-content")))]
-fn decode_mcp_image(_block: &serde_json::Value) -> Option<()> {
-    None
-}
-
 #[allow(clippy::disallowed_methods)]
 pub(crate) fn new_warning_event(message: String) -> PrefixedWrappedHistoryCell {
     PrefixedWrappedHistoryCell::new(message.yellow(), "⚠ ".yellow(), "  ")
+}
+
+const TRUSTED_ACCESS_FOR_CYBER_URL: &str = "https://chatgpt.com/cyber";
+
+#[derive(Debug)]
+pub(crate) struct CyberPolicyNoticeCell;
+
+pub(crate) fn new_cyber_policy_error_event() -> CyberPolicyNoticeCell {
+    CyberPolicyNoticeCell
+}
+
+impl HistoryCell for CyberPolicyNoticeCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        let mut lines: Vec<Line<'static>> = Vec::new();
+        lines.push(
+            vec![
+                "ⓘ ".cyan(),
+                "This chat was flagged for possible cybersecurity risk".bold(),
+            ]
+            .into(),
+        );
+
+        let wrap_width = width.saturating_sub(2).max(1) as usize;
+        let body = Line::from(vec![
+            "  If this seems wrong, try rephrasing your request. To get authorized for security work, join the "
+                .dim(),
+            "Trusted Access for Cyber".cyan().underlined(),
+            " program.".dim(),
+        ]);
+        let wrapped = adaptive_wrap_line(
+            &body,
+            RtOptions::new(wrap_width).subsequent_indent("  ".into()),
+        );
+        push_owned_lines(&wrapped, &mut lines);
+        lines.push(
+            vec![
+                "  ".into(),
+                TRUSTED_ACCESS_FOR_CYBER_URL.cyan().underlined(),
+            ]
+            .into(),
+        );
+
+        lines
+    }
 }
 
 #[derive(Debug)]
@@ -2283,6 +2285,18 @@ pub(crate) fn new_mcp_tools_output_from_statuses(
         let header: Vec<Span<'static>> = vec!["  • ".into(), server.clone().into()];
 
         lines.push(header.into());
+        if matches!(detail, McpServerStatusDetail::Full) {
+            let enabled = cfg.map(|cfg| cfg.enabled).unwrap_or(true);
+            let status_text = if enabled {
+                "enabled".green()
+            } else {
+                "disabled".red()
+            };
+            lines.push(vec!["    • Status: ".into(), status_text].into());
+            if let Some(reason) = cfg.and_then(|cfg| cfg.disabled_reason.as_ref()) {
+                lines.push(vec!["    • Reason: ".into(), reason.to_string().dim()].into());
+            }
+        }
         let auth_status = status
             .map(|status| match status.auth_status {
                 codex_app_server_protocol::McpAuthStatus::Unsupported => McpAuthStatus::Unsupported,
@@ -3247,6 +3261,7 @@ mod tests {
             approval_policy: AskForApproval::Never,
             approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer::User,
             sandbox_policy: SandboxPolicy::new_read_only_policy(),
+            permission_profile: None,
             cwd: test_path_buf("/tmp/project").abs(),
             reasoning_effort: None,
             history_log_id: 0,
@@ -3340,8 +3355,7 @@ mod tests {
     fn ps_output_empty_snapshot() {
         let cell = new_unified_exec_processes_output(Vec::new());
         let rendered = render_lines(&cell.display_lines(/*width*/ 60)).join("\n");
-        assert!(rendered.contains("Calling ReadFile("));
-        assert!(rendered.contains("\"path\":\"dataset.csv\""));
+        insta::assert_snapshot!(rendered);
     }
 
     #[tokio::test]
@@ -3380,9 +3394,7 @@ mod tests {
         );
 
         let rendered = render_transcript(&cell).join("\n");
-        assert!(rendered.contains("Called WriteFile("));
-        assert!(rendered.contains("\"path\":\"kimi_memo.txt\""));
-        assert!(rendered.contains("File successfully overwritten."));
+        insta::assert_snapshot!(rendered);
     }
 
     #[tokio::test]
@@ -3434,6 +3446,20 @@ mod tests {
             },
         ]);
         let rendered = render_lines(&cell.display_lines(/*width*/ 40)).join("\n");
+        insta::assert_snapshot!(rendered);
+    }
+
+    #[test]
+    fn cyber_policy_error_event_snapshot() {
+        let cell = new_cyber_policy_error_event();
+        let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
+        insta::assert_snapshot!(rendered);
+    }
+
+    #[test]
+    fn cyber_policy_error_event_narrow_snapshot() {
+        let cell = new_cyber_policy_error_event();
+        let rendered = render_lines(&cell.display_lines(/*width*/ 36)).join("\n");
         insta::assert_snapshot!(rendered);
     }
 
@@ -3635,6 +3661,61 @@ mod tests {
         insta::assert_snapshot!(rendered);
     }
 
+    #[tokio::test]
+    async fn mcp_tools_output_from_statuses_renders_verbose_inventory() {
+        let mut config = test_config().await;
+        let plugin_docs =
+            stdio_server_config("docs-server", vec!["--stdio"], /*env*/ None, vec![]);
+        let servers = HashMap::from([("plugin_docs".to_string(), plugin_docs)]);
+        config
+            .mcp_servers
+            .set(servers)
+            .expect("test mcp servers should accept any configuration");
+
+        let statuses = vec![McpServerStatus {
+            name: "plugin_docs".to_string(),
+            tools: HashMap::from([(
+                "lookup".to_string(),
+                Tool {
+                    description: None,
+                    name: "lookup".to_string(),
+                    title: None,
+                    input_schema: serde_json::json!({"type": "object", "properties": {}}),
+                    output_schema: None,
+                    annotations: None,
+                    icons: None,
+                    meta: None,
+                },
+            )]),
+            resources: vec![Resource {
+                annotations: None,
+                description: None,
+                mime_type: None,
+                name: "docs".to_string(),
+                size: None,
+                title: Some("Docs".to_string()),
+                uri: "file:///docs".to_string(),
+                icons: None,
+                meta: None,
+            }],
+            resource_templates: vec![ResourceTemplate {
+                annotations: None,
+                uri_template: "file:///docs/{id}".to_string(),
+                name: "doc-template".to_string(),
+                title: Some("Doc Template".to_string()),
+                description: None,
+                mime_type: None,
+            }],
+            auth_status: codex_app_server_protocol::McpAuthStatus::Unsupported,
+        }];
+
+        let cell =
+            new_mcp_tools_output_from_statuses(&config, &statuses, McpServerStatusDetail::Full);
+        let rendered = render_lines(&cell.display_lines(/*width*/ 120)).join("\n");
+
+        insta::assert_snapshot!(rendered);
+    }
+
     #[test]
     fn empty_agent_message_cell_transcript() {
         let cell = AgentMessageCell::new(vec![Line::default()], /*is_first_line*/ false);
@@ -3644,13 +3725,10 @@ mod tests {
 
     #[test]
     fn prefixed_wrapped_history_cell_indents_wrapped_lines() {
-        let agent_name_lowercase =
-            ProductBranding::for_open_interpreter(/*is_open_interpreter*/ true)
-                .agent_name_lowercase();
         let summary = Line::from(vec![
             "You ".into(),
             "approved".bold(),
-            format!(" {agent_name_lowercase} to run ").into(),
+            " codex to run ".into(),
             "echo something really long to ensure wrapping happens".dim(),
             " this time".bold(),
         ]);
@@ -3659,10 +3737,9 @@ mod tests {
         assert_eq!(
             rendered,
             vec![
-                "✔ You approved".to_string(),
-                format!("  {agent_name_lowercase} to run"),
-                "  echo something really".to_string(),
-                "  long to ensure".to_string(),
+                "✔ You approved codex to".to_string(),
+                "  run echo something".to_string(),
+                "  really long to ensure".to_string(),
                 "  wrapping happens this".to_string(),
                 "  time".to_string(),
             ]
@@ -3867,8 +3944,7 @@ mod tests {
         );
         let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
 
-        assert!(rendered.contains("Calling ReadFile("));
-        assert!(rendered.contains("\"path\":\"dataset.csv\""));
+        insta::assert_snapshot!(rendered);
     }
 
     #[test]
@@ -3909,50 +3985,7 @@ mod tests {
 
         let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
 
-        assert!(rendered.contains("Called WriteFile("));
-        assert!(rendered.contains("\"path\":\"kimi_memo.txt\""));
-        assert!(rendered.contains("File successfully overwritten."));
-    }
-
-    #[test]
-    fn active_dynamic_tool_call_renders_name_and_arguments() {
-        let cell = new_active_dynamic_tool_call(
-            "call-dynamic-1".into(),
-            "ReadFile".into(),
-            json!({ "path": "dataset.csv" }),
-            /*animations_enabled*/ true,
-        );
-        let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
-
-        assert!(rendered.contains("Calling ReadFile("));
-        assert!(rendered.contains("\"path\":\"dataset.csv\""));
-    }
-
-    #[test]
-    fn completed_dynamic_tool_call_renders_result() {
-        let mut cell = new_active_dynamic_tool_call(
-            "call-dynamic-2".into(),
-            "WriteFile".into(),
-            json!({
-                "path": "kimi_memo.txt",
-                "content": "KIMI_VIDEO_OK"
-            }),
-            /*animations_enabled*/ true,
-        );
-        cell.complete(
-            Duration::from_millis(87),
-            vec![DynamicToolCallOutputContentItem::InputText {
-                text: "<system>File successfully overwritten.</system>".to_string(),
-            }],
-            true,
-            None,
-        );
-
-        let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
-
-        assert!(rendered.contains("Called WriteFile("));
-        assert!(rendered.contains("\"path\":\"kimi_memo.txt\""));
-        assert!(rendered.contains("File successfully overwritten."));
+        insta::assert_snapshot!(rendered);
     }
 
     #[test]

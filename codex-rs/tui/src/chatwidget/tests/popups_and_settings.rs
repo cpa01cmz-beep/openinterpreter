@@ -1,5 +1,6 @@
 use super::*;
 use codex_app_server_protocol::AppInfo;
+use codex_features::Stage;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
@@ -244,6 +245,34 @@ async fn plugin_detail_popup_hides_disclosure_for_installed_plugins() {
         "plugin_detail_popup_installed",
         strip_osc8_for_snapshot(&popup)
     );
+}
+
+#[tokio::test]
+async fn plugin_detail_error_popup_skips_disabled_row_numbering() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.set_feature_enabled(Feature::Plugins, /*enabled*/ true);
+
+    let response = plugins_test_response(vec![plugins_test_curated_marketplace(vec![
+        plugins_test_summary(
+            "plugin-figma",
+            "figma",
+            Some("Figma"),
+            Some("Design handoff."),
+            /*installed*/ false,
+            /*enabled*/ true,
+            PluginInstallPolicy::Available,
+        ),
+    ])]);
+    let cwd = chat.config.cwd.clone();
+    chat.on_plugins_loaded(cwd.to_path_buf(), Ok(response));
+    chat.add_plugins_output();
+    chat.on_plugin_detail_loaded(
+        cwd.to_path_buf(),
+        Err("Failed to load plugin details.".to_string()),
+    );
+
+    let popup = render_bottom_popup(&chat, /*width*/ 100);
+    assert_chatwidget_snapshot!("plugin_detail_error_popup", popup);
 }
 
 #[tokio::test]
@@ -1723,55 +1752,22 @@ async fn experimental_features_toggle_saves_on_exit() {
 }
 
 #[tokio::test]
-async fn experimental_popup_shows_js_repl_node_requirement() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    let js_repl_description = FEATURES
-        .iter()
-        .find(|spec| spec.id == Feature::JsRepl)
-        .and_then(|spec| spec.stage.experimental_menu_description())
-        .expect("expected js_repl experimental description");
-    let node_requirement = js_repl_description
-        .split(". ")
-        .find(|sentence| sentence.starts_with("Requires Node >= v"))
-        .map(|sentence| sentence.trim_end_matches(" installed."))
-        .expect("expected js_repl description to mention the Node requirement");
-
-    chat.open_experimental_popup();
-
-    let popup = render_bottom_popup(&chat, /*width*/ 120);
-    assert!(
-        popup.contains(node_requirement),
-        "expected js_repl feature description to mention the required Node version, got:\n{popup}"
-    );
-}
-
-#[tokio::test]
-async fn experimental_popup_includes_guardian_approval() {
+async fn experimental_popup_omits_stable_guardian_approval() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let guardian_stage = FEATURES
         .iter()
         .find(|spec| spec.id == Feature::GuardianApproval)
         .map(|spec| spec.stage)
         .expect("expected guardian approval feature metadata");
-    let guardian_name = guardian_stage
-        .experimental_menu_name()
-        .expect("expected guardian approval experimental menu name");
-    let guardian_description = guardian_stage
-        .experimental_menu_description()
-        .expect("expected guardian approval experimental description");
+
+    assert_eq!(guardian_stage, Stage::Stable);
 
     chat.open_experimental_popup();
 
     let popup = render_bottom_popup(&chat, /*width*/ 120);
-    let normalized_popup = popup.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        popup.contains(guardian_name),
-        "expected auto-review entry in experimental popup, got:\n{popup}"
-    );
-    assert!(
-        normalized_popup.contains(guardian_description),
-        "expected auto-review description in experimental popup, got:\n{popup}"
+        !popup.contains("Auto-review"),
+        "expected stable auto-review feature to be omitted from experimental popup, got:\n{popup}"
     );
 }
 
@@ -1901,7 +1897,7 @@ async fn memories_reset_confirmation_sends_event_on_confirm() {
 
 #[tokio::test]
 async fn model_selection_popup_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5-codex")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
     chat.thread_id = Some(ThreadId::new());
     chat.open_model_popup();
 
@@ -1911,7 +1907,7 @@ async fn model_selection_popup_snapshot() {
 
 #[tokio::test]
 async fn personality_selection_popup_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2-codex")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.thread_id = Some(ThreadId::new());
     chat.open_personality_popup();
 
@@ -1922,7 +1918,7 @@ async fn personality_selection_popup_snapshot() {
 #[cfg(not(target_os = "linux"))]
 #[tokio::test]
 async fn realtime_audio_selection_popup_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2-codex")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.open_realtime_audio_popup();
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -1932,7 +1928,7 @@ async fn realtime_audio_selection_popup_snapshot() {
 #[cfg(not(target_os = "linux"))]
 #[tokio::test]
 async fn realtime_audio_selection_popup_narrow_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2-codex")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.open_realtime_audio_popup();
 
     let popup = render_bottom_popup(&chat, /*width*/ 56);
@@ -1942,7 +1938,7 @@ async fn realtime_audio_selection_popup_narrow_snapshot() {
 #[cfg(not(target_os = "linux"))]
 #[tokio::test]
 async fn realtime_microphone_picker_popup_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2-codex")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.config.realtime_audio.microphone = Some("Studio Mic".to_string());
     chat.open_realtime_audio_device_selection_with_names(
         RealtimeAudioDeviceKind::Microphone,
@@ -1956,7 +1952,7 @@ async fn realtime_microphone_picker_popup_snapshot() {
 #[cfg(not(target_os = "linux"))]
 #[tokio::test]
 async fn realtime_audio_picker_emits_persist_event() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2-codex")).await;
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.open_realtime_audio_device_selection_with_names(
         RealtimeAudioDeviceKind::Speaker,
         vec!["Desk Speakers".to_string(), "Headphones".to_string()],
@@ -1989,8 +1985,6 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
             effort: ReasoningEffortConfig::Medium,
             description: "medium".to_string(),
         }],
-        reasoning_control: codex_protocol::openai_models::ReasoningControl::Effort,
-        supports_thinking_toggle: false,
         supports_personality: false,
         additional_speed_tiers: Vec::new(),
         is_default: false,
@@ -2019,8 +2013,8 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
 
 #[tokio::test]
 async fn server_overloaded_error_does_not_switch_models() {
-    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(Some("gpt-5.2-codex")).await;
-    chat.set_model("gpt-5.2-codex");
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
+    chat.set_model("gpt-5.3-codex");
     while rx.try_recv().is_ok() {}
     while op_rx.try_recv().is_ok() {}
 
@@ -2035,7 +2029,7 @@ async fn server_overloaded_error_does_not_switch_models() {
     while let Ok(event) = rx.try_recv() {
         if let AppEvent::UpdateModel(model) = event {
             assert_eq!(
-                model, "gpt-5.2-codex",
+                model, "gpt-5.3-codex",
                 "did not expect model switch on server-overloaded error"
             );
         }
@@ -2053,12 +2047,12 @@ async fn server_overloaded_error_does_not_switch_models() {
 
 #[tokio::test]
 async fn model_reasoning_selection_popup_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.1-codex-max")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
 
     set_chatgpt_auth(&mut chat);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
 
-    let preset = get_available_model(&chat, "gpt-5.1-codex-max");
+    let preset = get_available_model(&chat, "gpt-5.4");
     chat.open_reasoning_popup(preset);
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -2067,12 +2061,12 @@ async fn model_reasoning_selection_popup_snapshot() {
 
 #[tokio::test]
 async fn model_reasoning_selection_popup_extra_high_warning_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.1-codex-max")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
 
     set_chatgpt_auth(&mut chat);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::XHigh));
 
-    let preset = get_available_model(&chat, "gpt-5.1-codex-max");
+    let preset = get_available_model(&chat, "gpt-5.2");
     chat.open_reasoning_popup(preset);
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
@@ -2080,12 +2074,111 @@ async fn model_reasoning_selection_popup_extra_high_warning_snapshot() {
 }
 
 #[tokio::test]
+async fn alt_period_raises_reasoning_effort() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.thread_id = Some(ThreadId::new());
+    chat.set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::ALT));
+
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, AppEvent::UpdateModel(model) if model == "gpt-5.4")),
+        "expected model update event; events: {events:?}"
+    );
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::High))
+        )),
+        "expected reasoning update event; events: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, AppEvent::PersistModelSelection { .. })),
+        "expected no model persistence event; events: {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn alt_comma_lowers_reasoning_effort() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.thread_id = Some(ThreadId::new());
+    chat.set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char(','), KeyModifiers::ALT));
+
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::Low))
+        )),
+        "expected reasoning update event; events: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, AppEvent::PersistModelSelection { .. })),
+        "expected no model persistence event; events: {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn reasoning_shortcut_clears_armed_quit_shortcut() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.thread_id = Some(ThreadId::new());
+    chat.set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
+    chat.arm_quit_shortcut(key_hint::ctrl(KeyCode::Char('c')));
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::ALT));
+
+    assert!(!chat.bottom_pane.quit_shortcut_hint_visible());
+    assert!(chat.quit_shortcut_expires_at.is_none());
+    assert!(chat.quit_shortcut_key.is_none());
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, AppEvent::Exit(_))),
+        "did not expect reasoning shortcut to quit; events: {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn reasoning_shortcut_is_ignored_with_model_popup_open() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.thread_id = Some(ThreadId::new());
+    chat.set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
+    chat.open_model_popup();
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::ALT));
+
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, AppEvent::UpdateReasoningEffort(_))),
+        "did not expect reasoning update while popup is active; events: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, AppEvent::PersistModelSelection { .. })),
+        "did not expect model persistence while popup is active; events: {events:?}"
+    );
+}
+
+#[tokio::test]
 async fn reasoning_popup_shows_extra_high_with_space() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.1-codex-max")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
 
     set_chatgpt_auth(&mut chat);
 
-    let preset = get_available_model(&chat, "gpt-5.1-codex-max");
+    let preset = get_available_model(&chat, "gpt-5.4");
     chat.open_reasoning_popup(preset);
 
     let popup = render_bottom_popup(&chat, /*width*/ 120);
@@ -2097,94 +2190,6 @@ async fn reasoning_popup_shows_extra_high_with_space() {
         !popup.contains("Extrahigh"),
         "expected popup not to include 'Extrahigh'; popup: {popup}"
     );
-}
-
-#[tokio::test]
-async fn model_popup_single_default_effort_selects_and_dismisses() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    let preset = ModelPreset {
-        id: "deepseek-v4-pro".to_string(),
-        model: "deepseek-v4-pro".to_string(),
-        display_name: "deepseek-v4-pro".to_string(),
-        description: "".to_string(),
-        default_reasoning_effort: ReasoningEffortConfig::None,
-        supported_reasoning_efforts: Vec::new(),
-        reasoning_control: codex_protocol::openai_models::ReasoningControl::None,
-        supports_thinking_toggle: false,
-        supports_personality: false,
-        additional_speed_tiers: Vec::new(),
-        is_default: false,
-        upgrade: None,
-        show_in_picker: true,
-        availability_nux: None,
-        supported_in_api: true,
-        input_modalities: default_input_modalities(),
-    };
-
-    chat.open_all_models_popup(vec![preset]);
-    let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(popup.contains("deepseek-v4-pro"));
-    assert!(
-        !popup.contains("select reasoning effort"),
-        "single/default-effort models should not advertise a second reasoning step; popup: {popup}"
-    );
-
-    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
-
-    let popup_after_enter = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(
-        !popup_after_enter.contains("deepseek-v4-pro"),
-        "expected popup to dismiss after selecting single/default-effort model; popup: {popup_after_enter}"
-    );
-
-    let mut events = Vec::new();
-    while let Ok(ev) = rx.try_recv() {
-        events.push(ev);
-    }
-
-    assert!(
-        events.iter().any(|ev| matches!(
-            ev,
-            AppEvent::PersistModelSelection { model, effort }
-                if model == "deepseek-v4-pro" && effort.is_none()
-        )),
-        "expected model selection to persist directly; events: {events:?}"
-    );
-}
-
-#[tokio::test]
-async fn thinking_toggle_model_opens_thinking_mode_selection() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    let preset = ModelPreset {
-        id: "deepseek-v4-pro".to_string(),
-        model: "deepseek-v4-pro".to_string(),
-        display_name: "deepseek-v4-pro".to_string(),
-        description: "".to_string(),
-        default_reasoning_effort: ReasoningEffortConfig::Medium,
-        supported_reasoning_efforts: Vec::new(),
-        reasoning_control: codex_protocol::openai_models::ReasoningControl::ThinkingToggle,
-        supports_thinking_toggle: true,
-        supports_personality: false,
-        additional_speed_tiers: Vec::new(),
-        is_default: false,
-        upgrade: None,
-        show_in_picker: true,
-        availability_nux: None,
-        supported_in_api: true,
-        input_modalities: default_input_modalities(),
-    };
-
-    chat.open_reasoning_popup(preset);
-
-    let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(
-        popup.contains("Select Thinking Mode for deepseek-v4-pro"),
-        "expected thinking-toggle models to open thinking mode selection; popup: {popup}"
-    );
-    assert!(popup.contains("On (default)"));
-    assert!(popup.contains("Off"));
 }
 
 #[tokio::test]
@@ -2202,8 +2207,6 @@ async fn single_reasoning_option_skips_selection() {
         description: "".to_string(),
         default_reasoning_effort: ReasoningEffortConfig::High,
         supported_reasoning_efforts: single_effort,
-        reasoning_control: codex_protocol::openai_models::ReasoningControl::Effort,
-        supports_thinking_toggle: false,
         supports_personality: false,
         additional_speed_tiers: Vec::new(),
         is_default: false,
@@ -2284,12 +2287,12 @@ async fn feedback_good_result_consent_popup_includes_connectivity_diagnostics_fi
 }
 
 #[tokio::test]
-async fn reasoning_popup_escape_returns_to_provider_popup_from_root_model_flow() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.1-codex-max")).await;
+async fn reasoning_popup_escape_returns_to_model_popup() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     chat.thread_id = Some(ThreadId::new());
     chat.open_model_popup();
 
-    let preset = get_available_model(&chat, "gpt-5.1-codex-max");
+    let preset = get_available_model(&chat, "gpt-5.4");
     chat.open_reasoning_popup(preset);
 
     let before_escape = render_bottom_popup(&chat, /*width*/ 80);
@@ -2298,33 +2301,6 @@ async fn reasoning_popup_escape_returns_to_provider_popup_from_root_model_flow()
     chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
     let after_escape = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(after_escape.contains("Select Provider"));
-    assert!(!after_escape.contains("Select Reasoning Level"));
-}
-
-#[tokio::test]
-async fn provider_reasoning_popup_escape_returns_to_provider_model_popup() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.1-codex-max")).await;
-    chat.thread_id = Some(ThreadId::new());
-
-    let preset = get_available_model(&chat, "gpt-5.1-codex-max");
-    chat.open_model_popup_for_provider(
-        "anthropic".to_string(),
-        "Anthropic".to_string(),
-        vec![preset.clone()],
-    );
-    chat.open_reasoning_popup_for_provider(
-        "anthropic".to_string(),
-        "Anthropic".to_string(),
-        preset,
-    );
-
-    let before_escape = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(before_escape.contains("Select Reasoning Level"));
-
-    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-
-    let after_escape = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(after_escape.contains("Select Model for Anthropic"));
+    assert!(after_escape.contains("Select Model"));
     assert!(!after_escape.contains("Select Reasoning Level"));
 }

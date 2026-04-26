@@ -311,6 +311,7 @@ async fn collect_output_items(
             | ResponseEvent::ReasoningSummaryPartAdded { .. }
             | ResponseEvent::ToolCallInputDelta { .. }
             | ResponseEvent::RateLimits(_)
+            | ResponseEvent::ModelVerifications(_)
             | ResponseEvent::ModelsEtag(_) => {}
         }
     }
@@ -496,6 +497,7 @@ fn serialize_response_event(event: &ResponseEvent) -> std::io::Result<Option<byt
         | ResponseEvent::ServerReasoningIncluded(_)
         | ResponseEvent::ToolCallInputDelta { .. }
         | ResponseEvent::RateLimits(_)
+        | ResponseEvent::ModelVerifications(_)
         | ResponseEvent::ModelsEtag(_) => None,
     };
     let Some(payload) = payload else {

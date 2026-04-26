@@ -6,8 +6,8 @@ use codex_app_server_protocol::ReasoningEffortOption;
 use codex_core::config::Config;
 use codex_features::Feature;
 use codex_login::AuthManager;
+use codex_model_provider::create_model_provider;
 use codex_models_manager::collaboration_mode_presets::CollaborationModesConfig;
-use codex_models_manager::manager::ModelsManager;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffortPreset;
@@ -22,19 +22,18 @@ pub async fn supported_models(
             .features
             .enabled(Feature::DefaultModeRequestUserInput),
     };
-    ModelsManager::new_with_provider(
-        provider_cache_home(config, config.model_provider_id.as_str()),
-        auth_manager,
-        config.model_catalog.clone(),
-        collaboration_modes_config,
-        config.model_provider.clone(),
-    )
-    .list_models(RefreshStrategy::OnlineIfUncached)
-    .await
-    .into_iter()
-    .filter(|preset| include_hidden || preset.show_in_picker)
-    .map(model_from_preset)
-    .collect()
+    create_model_provider(config.model_provider.clone(), Some(auth_manager))
+        .models_manager(
+            provider_cache_home(config, config.model_provider_id.as_str()),
+            config.model_catalog.clone(),
+            collaboration_modes_config,
+        )
+        .list_models(RefreshStrategy::OnlineIfUncached)
+        .await
+        .into_iter()
+        .filter(|preset| include_hidden || preset.show_in_picker)
+        .map(model_from_preset)
+        .collect()
 }
 
 pub async fn supported_models_for_provider(
@@ -58,15 +57,14 @@ pub async fn supported_models_for_provider(
     } else {
         None
     };
-    let models = ModelsManager::new_with_provider(
-        provider_cache_home(config, provider_id),
-        auth_manager,
-        model_catalog,
-        collaboration_modes_config,
-        provider,
-    )
-    .list_models(RefreshStrategy::OnlineIfUncached)
-    .await;
+    let models = create_model_provider(provider, Some(auth_manager))
+        .models_manager(
+            provider_cache_home(config, provider_id),
+            model_catalog,
+            collaboration_modes_config,
+        )
+        .list_models(RefreshStrategy::OnlineIfUncached)
+        .await;
 
     Ok(models
         .into_iter()
@@ -75,7 +73,7 @@ pub async fn supported_models_for_provider(
         .collect())
 }
 
-fn model_from_preset(preset: ModelPreset) -> Model {
+pub(crate) fn model_from_preset(preset: ModelPreset) -> Model {
     Model {
         id: preset.id.to_string(),
         model: preset.model.to_string(),

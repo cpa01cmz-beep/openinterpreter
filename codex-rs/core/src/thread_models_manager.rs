@@ -2,24 +2,26 @@ use crate::config::Config;
 use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_models_manager::collaboration_mode_presets::CollaborationModesConfig;
-use codex_models_manager::manager::ModelsManager;
+use codex_models_manager::manager::SharedModelsManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 pub(crate) fn models_manager_for_config(
     config: &Config,
     auth_manager: Arc<AuthManager>,
-) -> ModelsManager {
-    ModelsManager::new_with_provider(
+) -> SharedModelsManager {
+    let provider = codex_model_provider::create_model_provider(
+        config.model_provider.clone(),
+        Some(auth_manager),
+    );
+    provider.models_manager(
         provider_cache_home(config),
-        auth_manager,
         config.model_catalog.clone(),
         CollaborationModesConfig {
             default_mode_request_user_input: config
                 .features
                 .enabled(Feature::DefaultModeRequestUserInput),
         },
-        config.model_provider.clone(),
     )
 }
 

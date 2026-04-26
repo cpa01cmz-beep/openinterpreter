@@ -8,6 +8,7 @@ use crate::TOOL_SEARCH_DEFAULT_LIMIT;
 use crate::TOOL_SEARCH_TOOL_NAME;
 use crate::TOOL_SUGGEST_TOOL_NAME;
 use crate::ToolHandlerKind;
+use crate::ToolName;
 use crate::ToolRegistryPlan;
 use crate::ToolRegistryPlanParams;
 use crate::ToolSearchSource;
@@ -16,6 +17,7 @@ use crate::ToolSpec;
 use crate::ToolsConfig;
 use crate::ViewImageToolOptions;
 use crate::WebSearchToolOptions;
+use crate::coalesce_loadable_tool_specs;
 use crate::collect_code_mode_exec_prompt_tool_definitions;
 use crate::collect_tool_search_source_infos;
 use crate::collect_tool_suggest_entries;
@@ -36,11 +38,11 @@ use crate::create_claude_code_write_tool;
 use crate::create_close_agent_tool_v1;
 use crate::create_close_agent_tool_v2;
 use crate::create_code_mode_tool;
+use crate::create_create_goal_tool;
 use crate::create_exec_command_tool;
 use crate::create_followup_task_tool;
+use crate::create_get_goal_tool;
 use crate::create_image_generation_tool;
-use crate::create_js_repl_reset_tool;
-use crate::create_js_repl_tool;
 use crate::create_kimi_cli_agent_tool;
 use crate::create_kimi_cli_ask_user_question_tool;
 use crate::create_kimi_cli_enter_plan_mode_tool;
@@ -80,6 +82,7 @@ use crate::create_spawn_agents_on_csv_tool;
 use crate::create_test_sync_tool;
 use crate::create_tool_search_tool;
 use crate::create_tool_suggest_tool;
+use crate::create_update_goal_tool;
 use crate::create_update_plan_tool;
 use crate::create_view_image_tool;
 use crate::create_wait_agent_tool_v1;
@@ -88,6 +91,7 @@ use crate::create_wait_tool;
 use crate::create_web_search_tool;
 use crate::create_write_stdin_tool;
 use crate::default_namespace_description;
+use crate::dynamic_tool_to_loadable_tool_spec;
 use crate::dynamic_tool_to_responses_api_tool;
 use crate::mcp_tool_to_responses_api_tool;
 use crate::request_permissions_tool_description;
@@ -514,20 +518,25 @@ pub fn build_tool_registry_plan(
         config.code_mode_enabled,
     );
     plan.register_handler("update_plan", ToolHandlerKind::Plan);
-
-    if config.has_environment && config.js_repl_enabled {
+    if config.goal_tools {
         plan.push_spec(
-            create_js_repl_tool(),
+            create_get_goal_tool(),
             /*supports_parallel_tool_calls*/ false,
             config.code_mode_enabled,
         );
+        plan.register_handler("get_goal", ToolHandlerKind::Goal);
         plan.push_spec(
-            create_js_repl_reset_tool(),
+            create_create_goal_tool(),
             /*supports_parallel_tool_calls*/ false,
             config.code_mode_enabled,
         );
-        plan.register_handler("js_repl", ToolHandlerKind::JsRepl);
-        plan.register_handler("js_repl_reset", ToolHandlerKind::JsReplReset);
+        plan.register_handler("create_goal", ToolHandlerKind::Goal);
+        plan.push_spec(
+            create_update_goal_tool(),
+            /*supports_parallel_tool_calls*/ false,
+            config.code_mode_enabled,
+        );
+        plan.register_handler("update_goal", ToolHandlerKind::Goal);
     }
 
     plan.push_spec(
@@ -697,6 +706,7 @@ pub fn build_tool_registry_plan(
                     hide_agent_type_model_reasoning: config.hide_spawn_agent_metadata,
                     include_usage_hint: config.spawn_agent_usage_hint,
                     usage_hint_text: config.spawn_agent_usage_hint_text.clone(),
+                    max_concurrent_threads_per_session: config.max_concurrent_threads_per_session,
                 }),
                 /*supports_parallel_tool_calls*/ false,
                 config.code_mode_enabled,
@@ -742,6 +752,7 @@ pub fn build_tool_registry_plan(
                     hide_agent_type_model_reasoning: config.hide_spawn_agent_metadata,
                     include_usage_hint: config.spawn_agent_usage_hint,
                     usage_hint_text: config.spawn_agent_usage_hint_text.clone(),
+                    max_concurrent_threads_per_session: config.max_concurrent_threads_per_session,
                 }),
                 /*supports_parallel_tool_calls*/ false,
                 config.code_mode_enabled,
@@ -854,15 +865,13 @@ pub fn build_tool_registry_plan(
         }
     }
 
+    let mut dynamic_tool_specs = Vec::new();
     for tool in params.dynamic_tools {
-        match dynamic_tool_to_responses_api_tool(tool) {
-            Ok(converted_tool) => {
-                plan.push_spec(
-                    ToolSpec::Function(converted_tool),
-                    /*supports_parallel_tool_calls*/ false,
-                    config.code_mode_enabled,
-                );
-                plan.register_handler(tool.name.clone(), ToolHandlerKind::DynamicTool);
+        match dynamic_tool_to_loadable_tool_spec(tool) {
+            Ok(loadable_tool) => {
+                let handler_name = ToolName::new(tool.namespace.clone(), tool.name.clone());
+                dynamic_tool_specs.push(loadable_tool);
+                plan.register_handler(handler_name, ToolHandlerKind::DynamicTool);
             }
             Err(error) => {
                 tracing::error!(
@@ -871,6 +880,13 @@ pub fn build_tool_registry_plan(
                 );
             }
         }
+    }
+    for spec in coalesce_loadable_tool_specs(dynamic_tool_specs) {
+        plan.push_spec(
+            spec.into(),
+            /*supports_parallel_tool_calls*/ false,
+            config.code_mode_enabled,
+        );
     }
 
     apply_tool_name_filters(&mut plan, config);

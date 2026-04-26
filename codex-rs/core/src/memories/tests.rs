@@ -427,8 +427,10 @@ mod phase2 {
     use chrono::Duration as ChronoDuration;
     use chrono::Utc;
     use codex_config::Constrained;
+    use codex_config::types::McpServerConfig;
     use codex_features::Feature;
     use codex_login::CodexAuth;
+    use codex_protocol::AgentPath;
     use codex_protocol::ThreadId;
     use codex_protocol::permissions::FileSystemSandboxPolicy;
     use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -439,6 +441,7 @@ mod phase2 {
     use codex_state::Phase2JobClaimOutcome;
     use codex_state::Stage1Output;
     use codex_state::ThreadMetadataBuilder;
+    use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -469,6 +472,10 @@ mod phase2 {
 
     impl DispatchHarness {
         async fn new() -> Self {
+            Self::new_with_config(|_| {}).await
+        }
+
+        async fn new_with_config(configure: impl FnOnce(&mut Config)) -> Self {
             let codex_home = tempfile::tempdir().expect("create temp codex home");
             let mut config = test_config().await;
             config.codex_home =
@@ -477,6 +484,7 @@ mod phase2 {
             config.cwd = config.codex_home.clone();
             config.permissions.file_system_sandbox_policy = FileSystemSandboxPolicy::unrestricted();
             config.permissions.network_sandbox_policy = NetworkSandboxPolicy::Enabled;
+            configure(&mut config);
             let config = Arc::new(config);
 
             let state_db = codex_state::StateRuntime::init(
@@ -490,9 +498,7 @@ mod phase2 {
                 CodexAuth::from_api_key("dummy"),
                 config.model_provider.clone(),
                 config.codex_home.to_path_buf(),
-                std::sync::Arc::new(codex_exec_server::EnvironmentManager::new(
-                    /*exec_server_url*/ None,
-                )),
+                std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
             );
             let (mut session, _turn_context) = make_session_and_context().await;
             session.services.state_db = Some(Arc::clone(&state_db));
@@ -643,7 +649,24 @@ mod phase2 {
 
     #[tokio::test]
     async fn dispatch_reclaims_stale_global_lock_and_starts_consolidation() {
-        let harness = DispatchHarness::new().await;
+        let harness = DispatchHarness::new_with_config(|config| {
+            let server: McpServerConfig =
+                toml::from_str("command = \"docs-server\"").expect("deserialize MCP server");
+            config
+                .mcp_servers
+                .set(HashMap::from([("docs".to_string(), server)]))
+                .expect("parent MCP servers are configurable");
+            config
+                .features
+                .enable(Feature::Apps)
+                .expect("apps feature is configurable");
+            config
+                .features
+                .enable(Feature::Plugins)
+                .expect("plugins feature is configurable");
+            config.include_apps_instructions = true;
+        })
+        .await;
         harness.seed_stage1_output(Utc::now().timestamp()).await;
 
         let stale_claim = harness
@@ -703,10 +726,23 @@ mod phase2 {
             }
             other => panic!("unexpected sandbox policy: {other:?}"),
         }
+        pretty_assertions::assert_eq!(
+            config_snapshot.session_source.get_agent_path(),
+            Some(AgentPath::morpheus())
+        );
+        assert!(
+            harness
+                .session
+                .services
+                .agent_control
+                .get_agent_metadata(thread_id)
+                .is_none(),
+            "memory consolidation should not be registered in the root collab agent registry"
+        );
         let turn_context = subagent.codex.session.new_default_turn().await;
         pretty_assertions::assert_eq!(
             turn_context.file_system_sandbox_policy,
-            FileSystemSandboxPolicy::from_legacy_sandbox_policy(
+            FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(
                 &config_snapshot.sandbox_policy,
                 config_snapshot.cwd.as_path(),
             ),
@@ -738,6 +774,33 @@ mod phase2 {
         assert!(
             !turn_context.features.enabled(Feature::MemoryTool),
             "consolidation subagent should have the memories feature disabled"
+        );
+        assert!(
+            turn_context.config.mcp_servers.get().is_empty(),
+            "consolidation subagent should not inherit configured MCP servers"
+        );
+        assert!(
+            !subagent
+                .codex
+                .session
+                .services
+                .mcp_connection_manager
+                .read()
+                .await
+                .has_servers(),
+            "consolidation subagent should not initialize MCP servers"
+        );
+        assert!(
+            !turn_context.features.enabled(Feature::Apps),
+            "consolidation subagent should not expose app-backed MCP"
+        );
+        assert!(
+            !turn_context.features.enabled(Feature::Plugins),
+            "consolidation subagent should not expose plugin-backed MCP"
+        );
+        assert!(
+            !turn_context.config.include_apps_instructions,
+            "consolidation subagent should not include apps instructions"
         );
         assert!(
             !turn_context.config.memories.generate_memories,
@@ -991,21 +1054,21 @@ mod phase2 {
             "stage-1 success should enqueue global consolidation"
         );
 
-        let telepathy_resources = config
+        let chronicle_resources = config
             .codex_home
-            .join("memories_extensions/telepathy/resources");
-        tokio::fs::create_dir_all(&telepathy_resources)
+            .join("memories_extensions/chronicle/resources");
+        tokio::fs::create_dir_all(&chronicle_resources)
             .await
-            .expect("create telepathy resources");
+            .expect("create chronicle resources");
         tokio::fs::write(
             config
                 .codex_home
-                .join("memories_extensions/telepathy/instructions.md"),
+                .join("memories_extensions/chronicle/instructions.md"),
             "instructions",
         )
         .await
-        .expect("write telepathy instructions");
-        let old_file = telepathy_resources.join(format!(
+        .expect("write chronicle instructions");
+        let old_file = chronicle_resources.join(format!(
             "{}-abcd-10min-old.md",
             (Utc::now() - ChronoDuration::days(8)).format("%Y-%m-%dT%H-%M-%S")
         ));

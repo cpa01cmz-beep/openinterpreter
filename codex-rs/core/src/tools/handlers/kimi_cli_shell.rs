@@ -119,9 +119,13 @@ impl ToolHandler for KimiShellHandler {
             /*turn_diff_tracker*/ None,
         );
         emitter.begin(event_ctx).await;
-        let effective_permissions =
-            apply_granted_turn_permissions(session.as_ref(), SandboxPermissions::UseDefault, None)
-                .await;
+        let effective_permissions = apply_granted_turn_permissions(
+            session.as_ref(),
+            turn.cwd.as_path(),
+            SandboxPermissions::UseDefault,
+            None,
+        )
+        .await;
         let exec_approval_requirement = session
             .services
             .exec_policy

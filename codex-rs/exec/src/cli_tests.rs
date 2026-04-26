@@ -14,10 +14,14 @@ fn resume_parses_prompt_after_global_flags() {
         "--dangerously-bypass-approvals-and-sandbox",
         "--skip-git-repo-check",
         "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
         PROMPT,
     ]);
 
     assert!(cli.ephemeral);
+    assert!(cli.ignore_user_config);
+    assert!(cli.ignore_rules);
     let Some(Command::Resume(args)) = cli.command else {
         panic!("expected resume command");
     };
@@ -55,19 +59,14 @@ fn resume_accepts_output_last_message_flag_after_subcommand() {
 }
 
 #[test]
-fn parses_hidden_remote_exec_options() {
+fn parses_config_isolation_flags() {
     let cli = Cli::parse_from([
         "codex-exec",
-        "--remote",
-        "ws://127.0.0.1:7777",
-        "--remote-auth-token-env",
-        "CODEX_TOKEN",
-        "--json",
-        "hello",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "summarize",
     ]);
 
-    assert_eq!(cli.remote, Some("ws://127.0.0.1:7777".to_string()));
-    assert_eq!(cli.remote_auth_token_env, Some("CODEX_TOKEN".to_string()));
-    assert!(cli.json);
-    assert_eq!(cli.prompt.as_deref(), Some("hello"));
+    assert!(cli.ignore_user_config);
+    assert!(cli.ignore_rules);
 }

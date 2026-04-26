@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use crate::AppServerTransport;
 use crate::AppServerWebsocketAuthArgs;
-use crate::RunMainOptions;
 use crate::run_main_with_transport;
 
 // Debug-only test hook: lets integration tests point the server at a temporary
@@ -65,13 +64,9 @@ where
         arg0_paths,
         args.config_overrides,
         loader_overrides,
-        RunMainOptions {
-            default_analytics_enabled: false,
-            shutdown_idle_timeout: args.shutdown_idle_timeout_seconds.map(Duration::from_secs),
-            transport: args.listen,
-            session_source: args.session_source,
-            ..RunMainOptions::default()
-        },
+        /*default_analytics_enabled*/ false,
+        args.listen,
+        args.session_source,
         auth,
     )
     .await?;

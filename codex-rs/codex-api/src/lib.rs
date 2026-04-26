@@ -31,6 +31,7 @@ pub use crate::anthropic::AnthropicTextBlock;
 pub use crate::anthropic::AnthropicThinkingConfig;
 pub use crate::anthropic::AnthropicTool;
 pub use crate::api_bridge::map_api_error;
+pub use crate::auth::AuthError;
 pub use crate::auth::AuthHeaderTelemetry;
 pub use crate::auth::AuthProvider;
 pub use crate::auth::SharedAuthProvider;

@@ -19,7 +19,6 @@ use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use codex_models_manager::manager::RefreshStrategy;
-use codex_protocol::models::DeveloperInstructions;
 use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::protocol::AgentStatus as ProtocolAgentStatus;
 use serde::Deserialize;
@@ -94,13 +93,9 @@ impl ToolHandler for ClaudeAgentHandler {
         apply_spawn_agent_overrides(&mut config, child_depth);
         config.developer_instructions = Some(
             if let Some(existing_instructions) = config.developer_instructions.take() {
-                DeveloperInstructions::new(existing_instructions)
-                    .concat(DeveloperInstructions::new(
-                        CLAUDE_AGENT_DEVELOPER_INSTRUCTIONS,
-                    ))
-                    .into_text()
+                format!("{existing_instructions}\n\n{CLAUDE_AGENT_DEVELOPER_INSTRUCTIONS}")
             } else {
-                DeveloperInstructions::new(CLAUDE_AGENT_DEVELOPER_INSTRUCTIONS).into_text()
+                CLAUDE_AGENT_DEVELOPER_INSTRUCTIONS.to_string()
             },
         );
 
