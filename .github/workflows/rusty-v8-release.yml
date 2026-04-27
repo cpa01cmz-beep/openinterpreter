@@ -87,7 +87,6 @@ jobs:
 
       - name: Build Bazel V8 release pair
         env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
           PLATFORM: ${{ matrix.platform }}
           TARGET: ${{ matrix.target }}
         shell: bash
@@ -112,22 +111,12 @@ jobs:
             "${pair_target}"
             "${extra_targets[@]}"
             --build_metadata=COMMIT_SHA=$(git rev-parse HEAD)
+            --bes_backend=
+            --bes_results_url=
+            --remote_cache=
+            --remote_upload_local_results=false
+            --experimental_remote_downloader=
           )
-
-          if [[ -n "${BUILDBUDDY_API_KEY}" ]]; then
-            bazel_args+=(
-              --config=ci-v8
-              "--remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
-            )
-          else
-            bazel_args+=(
-              --bes_backend=
-              --bes_results_url=
-              --remote_cache=
-              --remote_upload_local_results=false
-              --experimental_remote_downloader=
-            )
-          fi
 
           bazel --noexperimental_remote_repo_contents_cache "${bazel_args[@]}"
 

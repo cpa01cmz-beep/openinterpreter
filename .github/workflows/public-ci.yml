@@ -54,6 +54,12 @@ jobs:
           end
 
           raise "release workflow must publish open-interpreter archives" unless text.include?("open-interpreter-*.tar.gz")
+
+          rusty_v8 = File.read(".github/workflows/rusty-v8-release.yml")
+          forbidden = ["BUILDBUDDY_API_KEY", "--remote_header=x-buildbuddy-api-key", "--config=ci-v8"]
+          forbidden.each do |needle|
+            raise "rusty-v8 release workflow must not use #{needle}" if rusty_v8.include?(needle)
+          end
           RUBY
 
       - name: Confirm inherited heavyweight workflows are manual-only
