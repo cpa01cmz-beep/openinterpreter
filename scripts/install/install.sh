@@ -676,10 +676,23 @@ can_replace_existing_interpreter_command() {
   grep -E '/target/(debug|release)/interpreter|[.]openinterpreter/packages/standalone/current/interpreter' "$candidate" >/dev/null 2>&1
 }
 
+existing_interpreter_points_to_current_install() {
+  candidate="$1"
+
+  [ -n "$candidate" ] || return 1
+  [ -f "$candidate" ] || return 1
+
+  grep -F ".openinterpreter/packages/standalone/current/interpreter" "$candidate" >/dev/null 2>&1
+}
+
 handle_existing_interpreter_command() {
   resolved_interpreter="$(command -v interpreter 2>/dev/null || true)"
 
   if [ -z "$resolved_interpreter" ] || [ "$resolved_interpreter" = "$BIN_PATH" ]; then
+    return
+  fi
+
+  if existing_interpreter_points_to_current_install "$resolved_interpreter"; then
     return
   fi
 
