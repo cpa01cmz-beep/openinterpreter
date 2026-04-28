@@ -673,7 +673,7 @@ safe_to_replace_interpreter_shim() {
   [ -f "$candidate" ] || return 1
   [ -w "$candidate" ] || return 1
 
-  grep -E 'open-interpreter-next/.*/target/.*/interpreter|codex-rs/target/.*/interpreter|[.]openinterpreter/packages/standalone/current/interpreter' "$candidate" >/dev/null 2>&1
+  grep -E '/target/(debug|release)/interpreter|[.]openinterpreter/packages/standalone/current/interpreter' "$candidate" >/dev/null 2>&1
 }
 
 update_shadowing_interpreter_command() {
