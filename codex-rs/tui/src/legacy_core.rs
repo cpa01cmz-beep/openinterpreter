@@ -13,6 +13,8 @@ pub use codex_core::MessageHistoryEntry;
 pub use codex_core::append_message_history_entry;
 pub use codex_core::check_execpolicy_for_warnings;
 pub use codex_core::format_exec_policy_error_with_source;
+#[cfg(target_os = "windows")]
+pub use codex_core::grant_read_root_non_elevated;
 #[cfg(feature = "cross-session-history")]
 pub use codex_core::lookup_message_history_entry;
 #[cfg(feature = "cross-session-history")]
