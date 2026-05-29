@@ -324,7 +324,7 @@ rustls = { version = "0.23", default-features = false, features = [
     "std",
 ] }
 rustls-native-certs = "0.8.3"
-rustls-pki-types = "1.14.0"
+rustls-pki-types = "1.14.1"
 schemars = "0.8.22"
 seccompiler = "0.5.0"
 semver = "1.0"
@@ -332,7 +332,7 @@ sentry = "0.46.0"
 serde = "1"
 serde_json = "1"
 serde_path_to_error = "0.1.20"
-serde_with = "3.17"
+serde_with = "3.20"
 serde_yaml = "0.9"
 serial_test = "3.2.0"
 sha1 = "0.10.6"

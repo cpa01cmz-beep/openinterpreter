@@ -28,7 +28,6 @@ const INTERPRETER_ACP_BINARY: &str = if cfg!(windows) {
 } else {
     "interpreter-acp"
 };
-const STARTUP_MESSAGE_SHOWN_ENV: &str = "OPEN_INTERPRETER_STARTUP_MESSAGE_SHOWN";
 
 fn main() -> anyhow::Result<()> {
     record_startup_trace_event("interpreter.main.enter");
@@ -217,12 +216,10 @@ fn exec_interpreter_cli(raw_args: Vec<OsString>) -> anyhow::Result<()> {
 }
 
 fn exec_interpreter_root_tui(raw_args: Vec<OsString>) -> anyhow::Result<()> {
-    print_root_tui_startup_message(&raw_args);
-    exec_binary_with_env(
-        resolve_interpreter_root_tui_binary()?,
-        raw_args,
-        [(STARTUP_MESSAGE_SHOWN_ENV, "1")],
-    )
+    // The startup status line is owned entirely by `interpreter-root-tui`, which
+    // can show it conditionally (only when the daemon is actually cold-starting)
+    // and animate it. Printing here would always fire, regardless of state.
+    exec_binary(resolve_interpreter_root_tui_binary()?, raw_args)
 }
 
 fn exec_interpreter_acp(_raw_args: Vec<OsString>) -> anyhow::Result<()> {
@@ -257,31 +254,6 @@ fn exec_binary_with_env<const N: usize>(
         let status = command.status()?;
         std::process::exit(status.code().unwrap_or(1));
     }
-}
-
-fn print_root_tui_startup_message(raw_args: &[OsString]) {
-    if std::io::stderr().is_terminal() && !raw_args_select_remote(raw_args) {
-        eprint!("\rStarting Open Interpreter daemon. This only happens once...");
-        let _ = std::io::stderr().flush();
-    }
-}
-
-fn raw_args_select_remote(raw_args: &[OsString]) -> bool {
-    let mut index = 0usize;
-    while index < raw_args.len() {
-        let arg = raw_args[index].to_string_lossy();
-        if arg == "--" {
-            return false;
-        }
-        if matches!(arg.as_ref(), "--remote" | "--url") {
-            return true;
-        }
-        if arg.starts_with("--remote=") || arg.starts_with("--url=") {
-            return true;
-        }
-        index += 1;
-    }
-    false
 }
 
 fn ensure_daemon_command_uses_local_daemon(
