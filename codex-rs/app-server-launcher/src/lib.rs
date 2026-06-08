@@ -226,7 +226,13 @@ async fn ensure_app_server_url_with_launch_spec(
 
     let websocket_url = reserve_websocket_url()?;
     record_startup_trace_event("interpreter.daemon.spawn.start");
-    let pid = spawn_app_server(&paths.log_path, launch_spec, &websocket_url, &cli_overrides)?;
+    let pid = spawn_app_server(
+        &paths.log_path,
+        launch_spec,
+        codex_home,
+        &websocket_url,
+        &cli_overrides,
+    )?;
     wait_for_healthy_server(&websocket_url)
         .await
         .with_context(|| {
@@ -534,6 +540,7 @@ fn resolve_default_app_server_binary() -> Result<PathBuf> {
 fn spawn_app_server(
     log_path: &Path,
     launch_spec: &LaunchSpec,
+    codex_home: &Path,
     websocket_url: &str,
     cli_overrides: &[String],
 ) -> Result<u32> {
@@ -550,6 +557,10 @@ fn spawn_app_server(
     command
         .args(&launch_spec.args)
         .args(build_app_server_spawn_args(websocket_url, cli_overrides))
+        .env("CODEX_HOME", codex_home)
+        .env("INTERPRETER_HOME", codex_home)
+        .env("OPEN_INTERPRETER_HOME", codex_home)
+        .env("OPEN_INTERPRETER_BRAND", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
@@ -567,9 +578,10 @@ fn spawn_app_server(
     {
         use std::os::windows::process::CommandExt;
 
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        command.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
     }
 
     let child = command.spawn().with_context(|| {
@@ -853,6 +865,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ensure_app_server_url_sets_interpreter_home_for_child_daemon() {
+        let tempdir = TempDir::new().expect("tempdir");
+        let capture_path = tempdir.path().join("child-env.txt");
+        let launch_spec =
+            readyz_test_server_launch_spec_with_env_capture(tempdir.path(), &capture_path)
+                .expect("resolve test app-server");
+
+        let _url = ensure_app_server_url_with_launch_spec(tempdir.path(), &launch_spec, Vec::new())
+            .await
+            .expect("start daemon");
+        let paths = daemon_paths_for_home(tempdir.path());
+        let lockfile = read_lockfile(&paths.lockfile_path)
+            .expect("read lockfile")
+            .expect("lockfile exists");
+        let child_env = std::fs::read_to_string(&capture_path).expect("read child env capture");
+
+        assert_eq!(
+            child_env,
+            format!(
+                "CODEX_HOME={home}\nINTERPRETER_HOME={home}\nOPEN_INTERPRETER_HOME={home}\nOPEN_INTERPRETER_BRAND=1\n",
+                home = tempdir.path().display()
+            )
+        );
+
+        terminate_process(lockfile.pid, /*force*/ true);
+        assert!(wait_for_process_exit(lockfile.pid, Duration::from_secs(10)).await);
+    }
+
+    #[tokio::test]
     async fn ensure_app_server_url_serializes_concurrent_launchers_to_one_daemon() {
         let tempdir = TempDir::new().expect("tempdir");
         let launch_spec =
@@ -982,6 +1023,28 @@ mod tests {
     }
 
     fn readyz_test_server_launch_spec_with_marker(root: &Path, marker: &str) -> Result<LaunchSpec> {
+        readyz_test_server_launch_spec_with_marker_and_args(root, marker, Vec::new())
+    }
+
+    fn readyz_test_server_launch_spec_with_env_capture(
+        root: &Path,
+        capture_path: &Path,
+    ) -> Result<LaunchSpec> {
+        readyz_test_server_launch_spec_with_marker_and_args(
+            root,
+            "",
+            vec![
+                "--capture-env".to_string(),
+                capture_path.display().to_string(),
+            ],
+        )
+    }
+
+    fn readyz_test_server_launch_spec_with_marker_and_args(
+        root: &Path,
+        marker: &str,
+        extra_args: Vec<String>,
+    ) -> Result<LaunchSpec> {
         let program = which::which("python3")
             .or_else(|_| which::which("python"))
             .context("could not find python interpreter for daemon test helper")?;
@@ -996,7 +1059,9 @@ mod tests {
             display_name: script_path.display().to_string(),
             artifact_fingerprint: launch_artifact_fingerprint(&script_path)?,
             program,
-            args: vec![script_path.display().to_string()],
+            args: std::iter::once(script_path.display().to_string())
+                .chain(extra_args)
+                .collect(),
         })
     }
 
@@ -1004,6 +1069,7 @@ mod tests {
         format!(
             r#"# marker: {marker}
 import http.server
+import os
 import socketserver
 import sys
 import urllib.parse
@@ -1014,6 +1080,25 @@ def parse_listen_url(argv):
         if arg == "--listen" and index + 1 < len(argv):
             return argv[index + 1]
     raise SystemExit("missing --listen argument")
+
+
+def parse_capture_env_path(argv):
+    for index, arg in enumerate(argv):
+        if arg == "--capture-env" and index + 1 < len(argv):
+            return argv[index + 1]
+    return None
+
+
+capture_env_path = parse_capture_env_path(sys.argv[1:])
+if capture_env_path is not None:
+    with open(capture_env_path, "w", encoding="utf-8") as capture_file:
+        for key in [
+            "CODEX_HOME",
+            "INTERPRETER_HOME",
+            "OPEN_INTERPRETER_HOME",
+            "OPEN_INTERPRETER_BRAND",
+        ]:
+            capture_file.write(f"{{key}}={{os.environ.get(key, '')}}\n")
 
 
 listen_url = parse_listen_url(sys.argv[1:])

@@ -2708,6 +2708,7 @@ dependencies = [
  "codex-utils-cli",
  "codex-utils-oss",
  "core_test_support",
+ "dirs",
  "libc",
  "opentelemetry",
  "opentelemetry_sdk",

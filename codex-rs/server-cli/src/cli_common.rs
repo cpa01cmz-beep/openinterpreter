@@ -80,6 +80,11 @@ pub struct LaunchOptions {
         value_hint = ValueHint::ExecutablePath
     )]
     pub app_server_bin: Option<PathBuf>,
+
+    /// Run the TUI against an in-process app server instead of spawning or
+    /// connecting to a daemon.
+    #[arg(long, hide = true, default_value_t = false)]
+    pub embedded_app_server: bool,
 }
 
 impl LaunchOptions {
@@ -90,6 +95,7 @@ impl LaunchOptions {
                 .remote_auth_token_env
                 .or(self.remote_auth_token_env),
             app_server_bin: override_options.app_server_bin.or(self.app_server_bin),
+            embedded_app_server: self.embedded_app_server || override_options.embedded_app_server,
         }
     }
 }

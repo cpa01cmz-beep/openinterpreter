@@ -48,6 +48,10 @@ struct RootTuiCli {
 }
 
 fn main() -> anyhow::Result<()> {
+    codex_arg0::run_on_large_stack(main_inner)
+}
+
+fn main_inner() -> anyhow::Result<()> {
     record_startup_trace_event("interpreter.main.enter");
     ensure_interpreter_home_env()?;
     record_startup_trace_event("interpreter.main.home.ready");
@@ -109,46 +113,55 @@ async fn run_root_tui(
         if launch.remote_auth_token_env.is_some() {
             anyhow::bail!("`--remote-auth-token-env` requires `--remote`.");
         }
-        let daemon_cli_overrides = daemon_startup_overrides(&interactive.config_overrides);
-        record_startup_trace_event("interpreter.tui.delegate.enter");
-        codex_tui::run_main_with_deferred_remote(
-            interactive,
-            arg0_paths,
-            startup_model_display,
-            /*startup_requires_provider_setup_override*/ None,
-            move || {
-                let app_server_bin = launch.app_server_bin.clone();
-                let daemon_cli_overrides = daemon_cli_overrides.clone();
-                async move {
-                    let codex_home = home::current_interpreter_home()?;
-                    // Only animate the startup line when the daemon isn't already
-                    // up and healthy — otherwise it would flash for a frame on
-                    // every launch even though there is nothing to wait for.
-                    let already_running = matches!(
-                        codex_app_server_launcher::local_app_server_status(&codex_home).await,
-                        Ok(Some(status))
-                            if status.health == codex_app_server_launcher::DaemonHealth::Ready
-                    );
-                    let status_line = (!already_running)
-                        .then(startup_status::StartupStatus::start)
-                        .flatten();
+        if launch.embedded_app_server && launch.app_server_bin.is_some() {
+            anyhow::bail!("`--embedded-app-server` conflicts with `--app-server-bin`.");
+        }
+        if launch.embedded_app_server {
+            record_startup_trace_event("interpreter.tui.delegate.enter");
+            codex_tui::run_main_with_default_loader_overrides(interactive, arg0_paths, None, None)
+                .await?
+        } else {
+            let daemon_cli_overrides = daemon_startup_overrides(&interactive.config_overrides);
+            record_startup_trace_event("interpreter.tui.delegate.enter");
+            codex_tui::run_main_with_deferred_remote(
+                interactive,
+                arg0_paths,
+                startup_model_display,
+                /*startup_requires_provider_setup_override*/ None,
+                move || {
+                    let app_server_bin = launch.app_server_bin.clone();
+                    let daemon_cli_overrides = daemon_cli_overrides.clone();
+                    async move {
+                        let codex_home = home::current_interpreter_home()?;
+                        // Only animate the startup line when the daemon isn't already
+                        // up and healthy — otherwise it would flash for a frame on
+                        // every launch even though there is nothing to wait for.
+                        let already_running = matches!(
+                            codex_app_server_launcher::local_app_server_status(&codex_home).await,
+                            Ok(Some(status))
+                                if status.health == codex_app_server_launcher::DaemonHealth::Ready
+                        );
+                        let status_line = (!already_running)
+                            .then(startup_status::StartupStatus::start)
+                            .flatten();
 
-                    let url = codex_app_server_launcher::ensure_local_app_server_url(
-                        &codex_home,
-                        app_server_bin,
-                        daemon_cli_overrides,
-                    )
-                    .await
-                    .map_err(|err| std::io::Error::other(err.to_string()));
+                        let url = codex_app_server_launcher::ensure_local_app_server_url(
+                            &codex_home,
+                            app_server_bin,
+                            daemon_cli_overrides,
+                        )
+                        .await
+                        .map_err(|err| std::io::Error::other(err.to_string()));
 
-                    if let Some(status_line) = status_line {
-                        status_line.finish();
+                        if let Some(status_line) = status_line {
+                            status_line.finish();
+                        }
+                        url
                     }
-                    url
-                }
-            },
-        )
-        .await?
+                },
+            )
+            .await?
+        }
     };
     handle_app_exit(exit_info)
 }

@@ -30,6 +30,10 @@ const INTERPRETER_ACP_BINARY: &str = if cfg!(windows) {
 };
 
 fn main() -> anyhow::Result<()> {
+    codex_arg0::run_on_large_stack(main_inner)
+}
+
+fn main_inner() -> anyhow::Result<()> {
     record_startup_trace_event("interpreter.main.enter");
     home::ensure_interpreter_home_env()?;
     record_startup_trace_event("interpreter.main.home.ready");
@@ -48,6 +52,7 @@ fn main() -> anyhow::Result<()> {
                     remote: remote_present.then_some(String::new()),
                     remote_auth_token_env: remote_auth_token_present.then_some(String::new()),
                     app_server_bin: None,
+                    embedded_app_server: false,
                 };
                 ensure_daemon_command_uses_local_daemon(&launch)?;
                 arg0_dispatch_or_else_current_thread(|_| async move { kill_daemon(force).await })

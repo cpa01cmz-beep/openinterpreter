@@ -21,6 +21,11 @@ use crate::process::ChildTerminator;
 use crate::process::ProcessHandle;
 use crate::process::SpawnedProcess;
 
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+#[cfg(windows)]
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+
 #[cfg(target_os = "linux")]
 use libc;
 
@@ -109,6 +114,8 @@ async fn spawn_process_with_stdin_mode(
     let _ = inherited_fds;
 
     let mut command = Command::new(program);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
     #[cfg(unix)]
     if let Some(arg0) = arg0 {
         command.arg0(arg0);

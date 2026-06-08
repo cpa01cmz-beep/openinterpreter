@@ -15,6 +15,12 @@ use codex_arg0::arg0_dispatch_or_else;
 use codex_exec::Cli;
 use codex_exec::run_main;
 use codex_utils_cli::CliConfigOverrides;
+use std::path::PathBuf;
+
+const CODEX_HOME_ENV_VAR: &str = "CODEX_HOME";
+const INTERPRETER_HOME_ENV_VAR: &str = "INTERPRETER_HOME";
+const OPEN_INTERPRETER_HOME_ENV_VAR: &str = "OPEN_INTERPRETER_HOME";
+const OPEN_INTERPRETER_BRAND_ENV_VAR: &str = "OPEN_INTERPRETER_BRAND";
 
 #[derive(Parser, Debug)]
 struct TopCli {
@@ -26,6 +32,7 @@ struct TopCli {
 }
 
 fn main() -> anyhow::Result<()> {
+    ensure_interpreter_exec_home_env()?;
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
         let top_cli = TopCli::parse();
         // Merge root-level overrides into inner CLI struct so downstream logic remains unchanged.
@@ -38,6 +45,30 @@ fn main() -> anyhow::Result<()> {
         run_main(inner, arg0_paths).await?;
         Ok(())
     })
+}
+
+fn ensure_interpreter_exec_home_env() -> anyhow::Result<PathBuf> {
+    let home = std::env::var_os(INTERPRETER_HOME_ENV_VAR)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            std::env::var_os(OPEN_INTERPRETER_HOME_ENV_VAR).filter(|value| !value.is_empty())
+        })
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home_dir| home_dir.join(".openinterpreter")))
+        .ok_or_else(|| anyhow::anyhow!("failed to resolve Open Interpreter home directory"))?;
+    std::fs::create_dir_all(&home)?;
+    let canonical = home.canonicalize().unwrap_or(home);
+
+    // SAFETY: main() calls this before the tokio runtime starts any background
+    // threads, so mutating the process environment here is safe.
+    unsafe {
+        std::env::set_var(CODEX_HOME_ENV_VAR, &canonical);
+        std::env::set_var(INTERPRETER_HOME_ENV_VAR, &canonical);
+        std::env::set_var(OPEN_INTERPRETER_HOME_ENV_VAR, &canonical);
+        std::env::set_var(OPEN_INTERPRETER_BRAND_ENV_VAR, "1");
+    }
+
+    Ok(canonical)
 }
 
 #[cfg(test)]

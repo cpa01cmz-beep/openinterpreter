@@ -240,8 +240,14 @@ async fn run_tui(
     if remote_auth_token.is_some() && launch.remote.is_none() {
         anyhow::bail!("`--remote-auth-token-env` requires `--remote`.");
     }
+    if launch.embedded_app_server && launch.app_server_bin.is_some() {
+        anyhow::bail!("`--embedded-app-server` conflicts with `--app-server-bin`.");
+    }
 
     if let Some(remote) = remote {
+        if launch.embedded_app_server {
+            anyhow::bail!("`--embedded-app-server` conflicts with `--remote`.");
+        }
         record_startup_trace_event("interpreter.tui.delegate.enter");
         return codex_tui::run_main_with_default_loader_overrides(
             interactive,
@@ -261,6 +267,17 @@ async fn run_tui(
         (startup_preview.model_display != "default").then_some(startup_preview.model_display)
     };
     record_startup_trace_event("interpreter.tui.delegate.enter");
+    if launch.embedded_app_server {
+        return codex_tui::run_main_with_default_loader_overrides(
+            interactive,
+            arg0_paths,
+            None,
+            None,
+        )
+        .await
+        .map_err(anyhow::Error::from);
+    }
+
     codex_tui::run_main_with_deferred_remote(
         interactive,
         arg0_paths,
@@ -379,6 +396,7 @@ mod tests {
             remote: Some("ws://127.0.0.1:7777".to_string()),
             remote_auth_token_env: None,
             app_server_bin: None,
+            embedded_app_server: false,
         })
         .expect_err("remote daemon management should be rejected");
 

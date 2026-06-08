@@ -40,6 +40,7 @@ pub async fn run_exec_subcommand(
     let mut command = std::process::Command::new(&exec_binary);
     command
         .env("CODEX_HOME", &codex_home)
+        .env("OPEN_INTERPRETER_BRAND", "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

@@ -9,6 +9,11 @@ use tracing::trace;
 
 use codex_protocol::permissions::NetworkSandboxPolicy;
 
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+#[cfg(windows)]
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+
 /// Experimental environment variable that will be set to some non-empty value
 /// if both of the following are true:
 ///
@@ -61,12 +66,18 @@ pub(crate) async fn spawn_child_async(request: SpawnChildRequest<'_>) -> std::io
         mut env,
         kill_on_parent_drop,
     } = request;
+    #[cfg(not(unix))]
+    let _ = kill_on_parent_drop;
 
     trace!(
         "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {network_sandbox_policy:?} {stdio_policy:?} {env:?}"
     );
 
     let mut cmd = Command::new(&program);
+    #[cfg(windows)]
+    if matches!(stdio_policy, StdioPolicy::RedirectForShellTool) {
+        cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
+    }
     #[cfg(unix)]
     cmd.arg0(arg0.map_or_else(|| program.to_string_lossy().to_string(), String::from));
     cmd.args(args);

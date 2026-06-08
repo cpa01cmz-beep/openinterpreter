@@ -17,6 +17,7 @@ const MISSPELLED_APPLY_PATCH_ARG0: &str = "applypatch";
 const EXECVE_WRAPPER_ARG0: &str = "codex-execve-wrapper";
 const LOCK_FILENAME: &str = ".lock";
 const TOKIO_WORKER_STACK_SIZE_BYTES: usize = 16 * 1024 * 1024;
+const MAIN_THREAD_STACK_SIZE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Arg0DispatchPaths {
@@ -186,6 +187,20 @@ where
     Fut: Future<Output = anyhow::Result<()>>,
 {
     arg0_dispatch_with_runtime(main_fn, build_current_thread_runtime)
+}
+
+pub fn run_on_large_stack<F>(main_fn: F) -> anyhow::Result<()>
+where
+    F: FnOnce() -> anyhow::Result<()> + Send + 'static,
+{
+    let handle = std::thread::Builder::new()
+        .name("codex-main".to_string())
+        .stack_size(MAIN_THREAD_STACK_SIZE_BYTES)
+        .spawn(main_fn)?;
+    match handle.join() {
+        Ok(result) => result,
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 fn linux_sandbox_exe_path(

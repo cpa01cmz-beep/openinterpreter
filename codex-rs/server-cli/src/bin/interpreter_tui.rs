@@ -5,6 +5,10 @@ use codex_server_cli::home::ensure_interpreter_home_env;
 use codex_server_cli::startup_trace::record_startup_trace_event;
 
 fn main() -> anyhow::Result<()> {
+    codex_arg0::run_on_large_stack(main_inner)
+}
+
+fn main_inner() -> anyhow::Result<()> {
     record_startup_trace_event("interpreter.main.enter");
     ensure_interpreter_home_env()?;
     record_startup_trace_event("interpreter.main.home.ready");

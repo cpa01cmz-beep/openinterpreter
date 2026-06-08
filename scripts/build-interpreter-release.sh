@@ -40,19 +40,23 @@ for bin in "${required_bins[@]}"; do
 done
 
 mkdir -p "$shim_dir"
-cat >"$shim_path" <<EOF
+shim_tmp="$(mktemp "$shim_dir/.interpreter-shim.XXXXXX")"
+cat >"$shim_tmp" <<EOF
 #!/bin/sh
 exec "$target_dir/interpreter" "\$@"
 EOF
-chmod +x "$shim_path"
+chmod +x "$shim_tmp"
+mv -f "$shim_tmp" "$shim_path"
 
 # Also install the short `i` alias next to `interpreter`.
 i_shim_path="$shim_dir/i"
-cat >"$i_shim_path" <<EOF
+i_shim_tmp="$(mktemp "$shim_dir/.i-shim.XXXXXX")"
+cat >"$i_shim_tmp" <<EOF
 #!/bin/sh
 exec "$target_dir/interpreter" "\$@"
 EOF
-chmod +x "$i_shim_path"
+chmod +x "$i_shim_tmp"
+mv -f "$i_shim_tmp" "$i_shim_path"
 
 echo
 echo "Built and verified:"
