@@ -1,3 +1,4 @@
+use crate::proxy::CHAT_WIRE_UPSTREAM_URL_HEADER;
 use crate::request::ToolKinds;
 use crate::request::convert_request;
 use crate::stream::spawn_chat_stream;
@@ -86,12 +87,6 @@ impl<T: HttpTransport, A: AuthProvider> ChatCompletionsCompatClient<T, A> {
         tool_kinds: ToolKinds,
         options: ResponsesOptions,
     ) -> Result<ResponseStream, ApiError> {
-        // Drop request fields that the target chat provider does not accept. Some
-        // harnesses emit provider-specific extensions (e.g. kimi-cli's
-        // `prompt_cache_key`, deepseek-tui's `reasoning_content`) that strict
-        // OpenAI-compatible upstreams like Groq reject outright.
-        sanitize_chat_body_for_provider(&mut body, &self.provider.base_url);
-
         let ResponsesOptions {
             conversation_id,
             session_source,
@@ -99,6 +94,16 @@ impl<T: HttpTransport, A: AuthProvider> ChatCompletionsCompatClient<T, A> {
             compression,
             turn_state: _,
         } = options;
+        let provider_base_url = extra_headers
+            .get(CHAT_WIRE_UPSTREAM_URL_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or(self.provider.base_url.as_str());
+
+        // Drop request fields that the target chat provider does not accept. Some
+        // harnesses emit provider-specific extensions (e.g. kimi-cli's
+        // `prompt_cache_key`, deepseek-tui's `reasoning_content`) that strict
+        // OpenAI-compatible upstreams like Groq reject outright.
+        sanitize_chat_body_for_provider(&mut body, provider_base_url);
 
         if let Some(ref conversation_id) = conversation_id {
             insert_header(&mut extra_headers, "x-client-request-id", conversation_id);
@@ -257,6 +262,18 @@ impl<T: HttpTransport, A: AuthProvider> ChatCompletionsCompatClient<T, A> {
 /// changing behavior on the providers that rely on them.
 fn sanitize_chat_body_for_provider(body: &mut Value, base_url: &str) {
     let host = base_url.to_ascii_lowercase();
+    let is_deepseek = host.contains("api.deepseek.com");
+
+    if is_deepseek && let Some(messages) = body.get_mut("messages").and_then(Value::as_array_mut) {
+        for message in messages {
+            if let Some(message_obj) = message.as_object_mut()
+                && message_obj.get("role").and_then(Value::as_str) == Some("developer")
+            {
+                message_obj.insert("role".to_string(), Value::String("user".to_string()));
+            }
+        }
+    }
+
     // Groq's chat completions endpoint is strict about unknown fields.
     let is_groq = host.contains("api.groq.com");
     if !is_groq {
@@ -462,6 +479,26 @@ mod tests {
             },
             stream_idle_timeout: Duration::from_secs(1),
         }
+    }
+
+    #[test]
+    fn deepseek_sanitizer_maps_developer_messages_to_user() {
+        let mut body = serde_json::json!({
+            "model": "deepseek-v4-flash",
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "developer", "content": "developer"},
+                {"role": "user", "content": "user"}
+            ],
+            "stream": true
+        });
+
+        sanitize_chat_body_for_provider(&mut body, "https://api.deepseek.com/v1");
+
+        let messages = body["messages"].as_array().expect("messages");
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[1]["role"], "user");
+        assert_eq!(messages[2]["role"], "user");
     }
 
     #[test]

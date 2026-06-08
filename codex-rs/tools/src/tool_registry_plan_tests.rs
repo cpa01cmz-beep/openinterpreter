@@ -526,6 +526,45 @@ fn disabled_environment_omits_environment_backed_tools() {
 }
 
 #[test]
+fn claude_code_bare_includes_write_without_full_claude_surface() {
+    let model_info = model_info();
+    let features = Features::with_defaults();
+    let available_models = Vec::new();
+    let tools_config = ToolsConfig::new(&ToolsConfigParams {
+        model_info: &model_info,
+        available_models: &available_models,
+        features: &features,
+        image_generation_tool_auth_allowed: true,
+        web_search_mode: Some(WebSearchMode::Cached),
+        session_source: SessionSource::Cli,
+        sandbox_policy: &SandboxPolicy::DangerFullAccess,
+        windows_sandbox_level: WindowsSandboxLevel::Disabled,
+    })
+    .with_harness(Some("claude-code-bare"));
+    let (tools, handlers) = build_specs(
+        &tools_config,
+        /*mcp_tools*/ None,
+        /*deferred_mcp_tools*/ None,
+        &[],
+    );
+
+    assert_contains_tool_names(&tools, &["Bash", "Edit", "Read", "Write"]);
+    assert_lacks_tool_name(&tools, "TodoWrite");
+    assert_lacks_tool_name(&tools, "WebSearch");
+
+    let handled_names = handlers
+        .iter()
+        .map(|handler| handler.name.name.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for expected in ["Bash", "Edit", "Read", "Write"] {
+        assert!(
+            handled_names.contains(expected),
+            "expected handler for {expected}; had {handled_names:?}"
+        );
+    }
+}
+
+#[test]
 fn test_build_specs_agent_job_worker_tools_enabled() {
     let model_info = model_info();
     let mut features = Features::with_defaults();

@@ -8,6 +8,11 @@ use super::X_CODEX_TURN_METADATA_HEADER;
 use super::X_CODEX_WINDOW_ID_HEADER;
 use super::X_OPENAI_SUBAGENT_HEADER;
 use crate::client_common::Prompt;
+use codex_api::AnthropicMessage;
+use codex_api::AnthropicMessageContent;
+use codex_api::AnthropicMessageRequest;
+use codex_api::Provider as ApiProvider;
+use codex_api::RetryConfig;
 use codex_app_server_protocol::AuthMode;
 use codex_model_provider::BearerAuthProvider;
 use codex_model_provider_info::WireApi;
@@ -19,8 +24,10 @@ use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_tools::Harness;
+use http::HeaderMap;
 use pretty_assertions::assert_eq;
 use serde_json::json;
+use std::time::Duration;
 
 fn test_model_client(session_source: SessionSource) -> ModelClient {
     let provider = create_oss_provider_with_base_url("https://example.com/v1", WireApi::Responses);
@@ -82,6 +89,84 @@ fn test_session_telemetry() -> SessionTelemetry {
         "test-terminal".to_string(),
         SessionSource::Cli,
     )
+}
+
+fn test_api_provider(base_url: &str) -> ApiProvider {
+    ApiProvider {
+        name: "test".to_string(),
+        base_url: base_url.to_string(),
+        query_params: None,
+        headers: HeaderMap::new(),
+        retry: RetryConfig {
+            max_attempts: 1,
+            base_delay: Duration::from_millis(1),
+            retry_429: false,
+            retry_5xx: false,
+            retry_transport: false,
+        },
+        stream_idle_timeout: Duration::from_secs(300),
+    }
+}
+
+#[test]
+fn messages_harness_normalizer_maps_developer_messages_for_deepseek() {
+    let mut request = AnthropicMessageRequest {
+        model: "deepseek-v4-flash".to_string(),
+        messages: vec![
+            AnthropicMessage {
+                role: "developer".to_string(),
+                content: AnthropicMessageContent::Text("follow instructions".to_string()),
+            },
+            AnthropicMessage {
+                role: "user".to_string(),
+                content: AnthropicMessageContent::Text("build app".to_string()),
+            },
+        ],
+        system: Vec::new(),
+        tools: Vec::new(),
+        thinking: None,
+        context_management: None,
+        output_config: None,
+        metadata: None,
+        temperature: None,
+        max_tokens: 1024,
+        stream: true,
+    };
+
+    super::normalize_messages_harness_request_for_provider(
+        &test_api_provider("https://api.deepseek.com/anthropic"),
+        &mut request,
+    );
+
+    assert_eq!(request.messages[0].role, "user");
+    assert_eq!(request.messages[1].role, "user");
+}
+
+#[test]
+fn messages_harness_normalizer_keeps_anthropic_developer_messages() {
+    let mut request = AnthropicMessageRequest {
+        model: "claude-sonnet-4-6".to_string(),
+        messages: vec![AnthropicMessage {
+            role: "developer".to_string(),
+            content: AnthropicMessageContent::Text("follow instructions".to_string()),
+        }],
+        system: Vec::new(),
+        tools: Vec::new(),
+        thinking: None,
+        context_management: None,
+        output_config: None,
+        metadata: None,
+        temperature: None,
+        max_tokens: 1024,
+        stream: true,
+    };
+
+    super::normalize_messages_harness_request_for_provider(
+        &test_api_provider("https://api.anthropic.com"),
+        &mut request,
+    );
+
+    assert_eq!(request.messages[0].role, "developer");
 }
 
 #[test]

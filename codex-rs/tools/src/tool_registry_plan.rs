@@ -238,6 +238,11 @@ pub fn build_tool_registry_plan(
                 /*supports_parallel_tool_calls*/ false,
                 /*code_mode_enabled*/ false,
             );
+            plan.push_spec(
+                create_claude_code_write_tool(),
+                /*supports_parallel_tool_calls*/ false,
+                /*code_mode_enabled*/ false,
+            );
             if !using_claude_code_bare {
                 plan.push_spec(
                     create_claude_code_todo_write_tool(),
@@ -251,11 +256,6 @@ pub fn build_tool_registry_plan(
                 );
                 plan.push_spec(
                     create_claude_code_web_search_tool(),
-                    /*supports_parallel_tool_calls*/ false,
-                    /*code_mode_enabled*/ false,
-                );
-                plan.push_spec(
-                    create_claude_code_write_tool(),
                     /*supports_parallel_tool_calls*/ false,
                     /*code_mode_enabled*/ false,
                 );
@@ -273,11 +273,11 @@ pub fn build_tool_registry_plan(
                 plan.register_handler("TodoWrite", ToolHandlerKind::ClaudeTodoWrite);
                 plan.register_handler("WebFetch", ToolHandlerKind::ClaudeWebFetch);
                 plan.register_handler("WebSearch", ToolHandlerKind::ClaudeWebSearch);
-                plan.register_handler("Write", ToolHandlerKind::ClaudeWrite);
             }
             plan.register_handler("Bash", ToolHandlerKind::ClaudeBash);
             plan.register_handler("Edit", ToolHandlerKind::ClaudeEdit);
             plan.register_handler("Read", ToolHandlerKind::ClaudeRead);
+            plan.register_handler("Write", ToolHandlerKind::ClaudeWrite);
         }
 
         if let Some(mcp_tools) = params.mcp_tools.filter(|_| !using_claude_code_bare) {
