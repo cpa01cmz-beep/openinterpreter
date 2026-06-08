@@ -304,11 +304,11 @@ fn trim_trailing_blank_lines(mut lines: Vec<Line<'static>>) -> Vec<Line<'static>
 }
 
 fn gentle_top_separator_line(width: u16) -> Line<'static> {
-    Line::from("⎺".repeat(usize::from(width))).dim()
+    Line::from("─".repeat(usize::from(width))).dim()
 }
 
 fn gentle_bottom_separator_line(width: u16) -> Line<'static> {
-    Line::from("⎽".repeat(usize::from(width))).dim()
+    Line::from("─".repeat(usize::from(width))).dim()
 }
 
 impl HistoryCell for UserHistoryCell {

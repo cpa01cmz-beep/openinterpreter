@@ -46,6 +46,10 @@ struct TopCli {
 }
 
 fn main() -> anyhow::Result<()> {
+    codex_arg0::run_on_large_stack(main_inner)
+}
+
+fn main_inner() -> anyhow::Result<()> {
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
         let top_cli = TopCli::parse();
         let mut inner = top_cli.inner;

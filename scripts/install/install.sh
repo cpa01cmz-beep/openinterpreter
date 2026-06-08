@@ -584,22 +584,22 @@ print_launch_instructions() {
   case "$path_action" in
     added)
       step "To run now: export PATH=\"$BIN_DIR:\$PATH\" && interpreter"
-      step "After opening a new terminal: interpreter"
+      step "After opening a new terminal: interpreter or i"
       step "PATH was added to $path_profile"
       ;;
     updated)
       step "To run now: export PATH=\"$BIN_DIR:\$PATH\" && interpreter"
-      step "After opening a new terminal: interpreter"
+      step "After opening a new terminal: interpreter or i"
       step "PATH was updated in $path_profile"
       ;;
     configured)
       step "To run now: export PATH=\"$BIN_DIR:\$PATH\" && interpreter"
-      step "After opening a new terminal: interpreter"
+      step "After opening a new terminal: interpreter or i"
       step "PATH is already configured in $path_profile"
       ;;
     *)
-      step "To run now: interpreter"
-      step "After opening a new terminal: interpreter"
+      step "To run now: interpreter or i"
+      step "After opening a new terminal: interpreter or i"
       ;;
   esac
 }

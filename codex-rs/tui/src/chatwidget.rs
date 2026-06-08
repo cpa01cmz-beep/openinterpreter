@@ -2401,6 +2401,9 @@ impl ChatWidget {
         self.status_line_project_root_name_cache = None;
         let forked_from_id = event.forked_from_id;
         let model_for_header = event.model.clone();
+        self.config.model_provider_id = event.model_provider_id.clone();
+        self.config.model = Some(model_for_header.clone());
+        self.config.model_reasoning_effort = event.reasoning_effort;
         self.session_header.set_model(&provider_model_label(
             &event.model_provider_id,
             &model_for_header,
@@ -11338,7 +11341,7 @@ impl ChatWidget {
 
     fn rename_confirmation_cell(name: &str, thread_id: Option<ThreadId>) -> PlainHistoryCell {
         let resume_cmd = crate::legacy_core::util::resume_command(Some(name), thread_id)
-            .unwrap_or_else(|| format!("codex resume {name}"));
+            .unwrap_or_else(|| format!("interpreter resume {name}"));
         let name = name.to_string();
         let line = vec![
             "• ".into(),

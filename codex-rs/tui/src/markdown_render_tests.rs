@@ -1011,7 +1011,7 @@ fn code_block_indented() {
 }
 
 #[test]
-fn horizontal_rule_renders_em_dashes() {
+fn horizontal_rule_renders_box_drawing_line() {
     let md = "Before\n\n---\n\nAfter\n";
     let text = render_markdown_text(md);
     let lines: Vec<String> = text
@@ -1024,7 +1024,16 @@ fn horizontal_rule_renders_em_dashes() {
                 .collect::<String>()
         })
         .collect();
-    assert_eq!(lines, vec!["Before", "", "———", "", "After"]);
+    assert_eq!(
+        lines,
+        vec![
+            "Before".to_string(),
+            String::new(),
+            "─".repeat(80),
+            String::new(),
+            "After".to_string(),
+        ]
+    );
 }
 
 #[test]

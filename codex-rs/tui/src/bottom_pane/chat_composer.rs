@@ -4209,7 +4209,7 @@ impl ChatComposer {
             }
         }
         if composer_rect.width > 0 && composer_rect.height > 0 {
-            Line::from("⎺".repeat(usize::from(composer_rect.width)))
+            Line::from("─".repeat(usize::from(composer_rect.width)))
                 .dim()
                 .render_ref(
                     Rect {
@@ -4450,7 +4450,7 @@ mod tests {
             !rendered.contains('S'),
             "expected stale cells to be cleared before composer render:\n{rendered}",
         );
-        assert_eq!(buf[(0, 0)].symbol(), "⎺");
+        assert_eq!(buf[(0, 0)].symbol(), "─");
         assert_eq!(buf[(0, 1)].symbol(), "›");
         assert_eq!(buf[(0, 1)].style().bg, Some(Color::Reset));
     }

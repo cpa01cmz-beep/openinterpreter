@@ -124,6 +124,52 @@ async fn startup_session_configured_redraw_clears_old_placeholder_row() {
 }
 
 #[tokio::test]
+async fn session_configured_status_line_uses_event_provider_and_model() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("deepseek-v4-flash")).await;
+    chat.config.model_provider_id = "deepseek".to_string();
+    chat.config.tui_status_line = Some(vec!["model-name".to_string()]);
+
+    chat.handle_codex_event(Event {
+        id: "configured".into(),
+        msg: EventMsg::SessionConfigured(SessionConfiguredEvent {
+            session_id: ThreadId::new(),
+            forked_from_id: None,
+            thread_name: None,
+            model: "kimi-k2.5".to_string(),
+            model_provider_id: "moonshotai".to_string(),
+            service_tier: None,
+            approval_policy: AskForApproval::Never,
+            approvals_reviewer: ApprovalsReviewer::User,
+            sandbox_policy: SandboxPolicy::new_read_only_policy(),
+            permission_profile: None,
+            cwd: test_path_buf("/home/user/project").abs(),
+            reasoning_effort: Some(ReasoningEffortConfig::default()),
+            history_log_id: 0,
+            history_entry_count: 0,
+            initial_messages: None,
+            network_proxy: None,
+            rollout_path: None,
+        }),
+    });
+
+    let width = 100;
+    let height = chat.desired_height(width);
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("create terminal");
+    terminal
+        .draw(|f| chat.render(f.area(), f.buffer_mut()))
+        .expect("draw chat");
+    let rendered = normalized_backend_snapshot(terminal.backend());
+    assert!(rendered.contains("moonshotai kimi-k2.5"), "{rendered}");
+    assert!(
+        !rendered.contains("deepseek deepseek-v4-flash"),
+        "{rendered}"
+    );
+}
+
+#[tokio::test]
 async fn context_indicator_shows_used_tokens_when_window_unknown() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("unknown-model")).await;
 

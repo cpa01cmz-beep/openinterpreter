@@ -827,7 +827,7 @@ pub(super) fn render_bottom_popup(chat: &ChatWidget, width: u16) -> String {
 }
 
 fn is_bottom_pane_chrome_row(trimmed: &str) -> bool {
-    trimmed.is_empty() || trimmed.chars().all(|ch| matches!(ch, '⎺' | '▌'))
+    trimmed.is_empty() || trimmed.chars().all(|ch| matches!(ch, '─' | '▌'))
 }
 
 pub(super) fn strip_osc8_for_snapshot(text: &str) -> String {

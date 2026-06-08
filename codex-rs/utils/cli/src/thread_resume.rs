@@ -19,9 +19,9 @@ pub fn resume_command(thread_name: Option<&str>, thread_id: Option<ThreadId>) ->
         let needs_double_dash = target.starts_with('-');
         let escaped = shlex::try_join([target.as_str()]).unwrap_or_else(|_| target.clone());
         if needs_double_dash {
-            format!("codex resume -- {escaped}")
+            format!("interpreter resume -- {escaped}")
         } else {
-            format!("codex resume {escaped}")
+            format!("interpreter resume {escaped}")
         }
     })
 }
@@ -48,7 +48,7 @@ mod tests {
         let thread_id =
             ThreadId::from_string("123e4567-e89b-12d3-a456-426614174000").expect("valid thread id");
         let command = resume_command(Some("my-thread"), Some(thread_id));
-        assert_eq!(command, Some("codex resume my-thread".to_string()));
+        assert_eq!(command, Some("interpreter resume my-thread".to_string()));
     }
 
     #[test]
@@ -58,7 +58,7 @@ mod tests {
         let command = resume_command(/*thread_name*/ None, Some(thread_id));
         assert_eq!(
             command,
-            Some("codex resume 123e4567-e89b-12d3-a456-426614174000".to_string())
+            Some("interpreter resume 123e4567-e89b-12d3-a456-426614174000".to_string())
         );
     }
 
@@ -73,13 +73,16 @@ mod tests {
         let command = resume_command(Some("-starts-with-dash"), /*thread_id*/ None);
         assert_eq!(
             command,
-            Some("codex resume -- -starts-with-dash".to_string())
+            Some("interpreter resume -- -starts-with-dash".to_string())
         );
 
         let command = resume_command(Some("two words"), /*thread_id*/ None);
-        assert_eq!(command, Some("codex resume 'two words'".to_string()));
+        assert_eq!(command, Some("interpreter resume 'two words'".to_string()));
 
         let command = resume_command(Some("quote'case"), /*thread_id*/ None);
-        assert_eq!(command, Some("codex resume \"quote'case\"".to_string()));
+        assert_eq!(
+            command,
+            Some("interpreter resume \"quote'case\"".to_string())
+        );
     }
 }

@@ -1347,7 +1347,7 @@ impl Renderable for BottomPane {
     fn render(&self, area: Rect, buf: &mut Buffer) {
         self.as_renderable().render(area, buf);
         if self.active_view().is_some() && area.width > 0 && area.height > 0 {
-            Paragraph::new(Line::from("⎺".repeat(usize::from(area.width))).dim()).render(
+            Paragraph::new(Line::from("─".repeat(usize::from(area.width))).dim()).render(
                 Rect {
                     x: area.x,
                     y: area.y,

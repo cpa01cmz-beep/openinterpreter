@@ -20,8 +20,8 @@ pub struct Cli {
     #[clap(skip)]
     pub submit_prefill_prompt: bool,
 
-    // Internal controls set by the top-level `codex resume` subcommand.
-    // These are not exposed as user flags on the base `codex` command.
+    // Internal controls set by the top-level `interpreter resume` subcommand.
+    // These are not exposed as user flags on the base `interpreter` command.
     #[clap(skip)]
     pub resume_picker: bool,
 
@@ -29,7 +29,7 @@ pub struct Cli {
     pub resume_last: bool,
 
     /// Internal: resume a specific recorded session by id (UUID). Set by the
-    /// top-level `codex resume <SESSION_ID>` wrapper; not exposed as a public flag.
+    /// top-level `interpreter resume <SESSION_ID>` wrapper; not exposed as a public flag.
     #[clap(skip)]
     pub resume_session_id: Option<String>,
 
