@@ -27,48 +27,63 @@ pub(super) async fn handle(
     let input: KimiSkillArgs = serde_json::from_str(arguments).map_err(|err| {
         FunctionCallError::RespondToModel(format!("failed to parse Skill arguments: {err}"))
     })?;
-    let outcome = invocation.turn.turn_skills.snapshot.outcome();
-    let Some(skill) = outcome
-        .skills
-        .iter()
-        .find(|candidate| candidate.name == input.skill && outcome.is_skill_enabled(candidate))
-        .cloned()
-    else {
-        return Ok(boxed_tool_output(FunctionToolOutput::from_text(
-            format!(
-                "Skill \"{skill}\" not found in the current skill listing.",
-                skill = input.skill
-            ),
-            /*success*/ Some(false),
-        )));
+    let args = input.args.as_deref().unwrap_or_default();
+    let skill_name = input.skill.as_str();
+    let builtin_contents = match skill_name {
+        "check-kimi-code-docs" => Some(include_str!("kimi_code_skills/check-kimi-code-docs.md")),
+        "update-config" => Some(include_str!("kimi_code_skills/update-config.md")),
+        "write-goal" => Some(include_str!("kimi_code_skills/write-goal.md")),
+        _ => None,
     };
-
-    let contents = match invocation
-        .turn
-        .turn_skills
-        .snapshot
-        .read_skill_text(&skill)
-        .await
-    {
-        Ok(contents) => contents,
-        Err(err) => {
+    let (contents, source, directory) = if let Some(contents) = builtin_contents {
+        (
+            contents.to_string(),
+            "builtin",
+            format!("builtin://{skill_name}"),
+        )
+    } else {
+        let outcome = invocation.turn.turn_skills.snapshot.outcome();
+        let Some(skill) = outcome
+            .skills
+            .iter()
+            .find(|candidate| candidate.name == input.skill && outcome.is_skill_enabled(candidate))
+            .cloned()
+        else {
             return Ok(boxed_tool_output(FunctionToolOutput::from_text(
                 format!(
-                    "Failed to load Skill \"{skill}\": {err}",
+                    "Skill \"{skill}\" not found in the current skill listing.",
                     skill = input.skill
                 ),
                 /*success*/ Some(false),
             )));
-        }
+        };
+        let contents = match invocation
+            .turn
+            .turn_skills
+            .snapshot
+            .read_skill_text(&skill)
+            .await
+        {
+            Ok(contents) => contents,
+            Err(err) => {
+                return Ok(boxed_tool_output(FunctionToolOutput::from_text(
+                    format!(
+                        "Failed to load Skill \"{skill}\": {err}",
+                        skill = input.skill
+                    ),
+                    /*success*/ Some(false),
+                )));
+            }
+        };
+        let source = kimi_skill_source(skill.scope);
+        let directory = skill
+            .path_to_skills_md
+            .parent()
+            .unwrap_or_else(|| skill.path_to_skills_md.clone())
+            .to_string_lossy()
+            .into_owned();
+        (contents, source, directory)
     };
-    let args = input.args.as_deref().unwrap_or_default();
-    let source = kimi_skill_source(skill.scope);
-    let directory = skill
-        .path_to_skills_md
-        .parent()
-        .unwrap_or_else(|| skill.path_to_skills_md.clone())
-        .to_string_lossy()
-        .into_owned();
     let body = expand_skill_body(&contents, args);
     let message = ResponseItem::Message {
         id: None,
@@ -76,7 +91,7 @@ pub(super) async fn handle(
         content: vec![ContentItem::InputText {
             text: format!(
                 "Skill tool loaded instructions for this request. Follow them.\n\n<kimi-skill-loaded name=\"{}\" trigger=\"model-tool\" source=\"{source}\" dir=\"{}\" args=\"{}\">\n{body}\n</kimi-skill-loaded>",
-                escape_xml_attribute(&skill.name),
+                escape_xml_attribute(&input.skill),
                 escape_xml_attribute(&directory),
                 escape_xml_attribute(args),
             ),
@@ -92,7 +107,7 @@ pub(super) async fn handle(
     Ok(boxed_tool_output(FunctionToolOutput::from_text(
         format!(
             "Skill \"{name}\" loaded inline. Follow its instructions.",
-            name = skill.name
+            name = input.skill
         ),
         /*success*/ Some(true),
     )))
@@ -175,5 +190,24 @@ mod tests {
         assert_eq!(kimi_skill_source(SkillScope::User), "user");
         assert_eq!(kimi_skill_source(SkillScope::System), "extra");
         assert_eq!(kimi_skill_source(SkillScope::Admin), "extra");
+    }
+
+    #[test]
+    fn provider_default_skill_assets_match_the_captured_catalog() {
+        for (name, contents) in [
+            (
+                "check-kimi-code-docs",
+                include_str!("kimi_code_skills/check-kimi-code-docs.md"),
+            ),
+            (
+                "update-config",
+                include_str!("kimi_code_skills/update-config.md"),
+            ),
+            ("write-goal", include_str!("kimi_code_skills/write-goal.md")),
+        ] {
+            assert!(contents.starts_with("---\nname: "));
+            assert!(contents.contains(&format!("name: {name}\n")));
+            assert!(!expand_skill_body(contents, "").is_empty());
+        }
     }
 }
