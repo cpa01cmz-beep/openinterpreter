@@ -12,6 +12,7 @@ mod harness_fs;
 mod kimi_code_aliases;
 mod kimi_code_extra;
 mod kimi_code_format;
+mod kimi_code_skill;
 mod list_available_plugins_to_install;
 pub(crate) mod list_available_plugins_to_install_spec;
 mod mcp;

@@ -2781,6 +2781,9 @@ fn zcode_tool_input_text(name: &str, arguments: &str) -> String {
 async fn handle_zcode_skill(
     invocation: ToolInvocation,
 ) -> Result<Box<dyn ToolOutput>, FunctionCallError> {
+    if is_kimi_code(&invocation) {
+        return super::kimi_code_skill::handle(invocation).await;
+    }
     let arguments = function_arguments(&invocation.payload)?;
     let input: serde_json::Value = serde_json::from_str(arguments).unwrap_or_else(|_| json!({}));
     let skill = input
@@ -2807,12 +2810,6 @@ async fn handle_zcode_skill(
                 base_dir.display()
             ),
             Some(true),
-        )));
-    }
-    if is_kimi_code(&invocation) {
-        return Ok(boxed_tool_output(FunctionToolOutput::from_text(
-            format!("Skill \"{skill}\" not found in the current skill listing."),
-            Some(false),
         )));
     }
     Ok(boxed_tool_output(FunctionToolOutput::from_text(
